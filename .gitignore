@@ -63,9 +63,7 @@ coverage.xml
 dmypy.json
 
 # Project specific
-*.hack
 *.vm
-*.asm
 *.out
 *.tst
 *.cmp
