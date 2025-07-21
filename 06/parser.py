@@ -25,7 +25,6 @@ class Parser:
 
     def advance(self) -> None:
         while True:
-            # TODO: 無駄があるのでリファクタ
             if not self.hasMoreLines():
                 # EOF
                 self.current_line = None
