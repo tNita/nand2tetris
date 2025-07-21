@@ -4,6 +4,8 @@ from parser import Parser, InstructionType
 from hack_code import dest, comp, jump
 from symbol import Symbol
 
+RAM_START_ADDRESS = 16
+
 
 def resolve_address(symbol: Symbol, sym: str, ram_addr: int) -> tuple[int, int]:
     if sym.isdigit():
@@ -32,21 +34,20 @@ def main() -> None:
     hack_file = asm_file.replace(".asm", ".hack")
 
     # 1 pass: ラベル処理
-    p1 = Parser(asm_file)
     symbol = Symbol()
     row_num = 0
-    while p1.hasMoreLines():
-        p1.advance()
-        if p1.instructionType() == InstructionType.L_INSTRUCTION:
-            symbol.addEntry(p1.symbol(), row_num)
-        else:
-            row_num += 1
+    with Parser(asm_file) as p1:
+        while p1.hasMoreLines():
+            p1.advance()
+            if p1.instructionType() == InstructionType.L_INSTRUCTION:
+                symbol.addEntry(p1.symbol(), row_num)
+            else:
+                row_num += 1
 
     # 2 pass: コード生成
-    p2 = Parser(asm_file)
-    ram_addr = 16
+    ram_addr = RAM_START_ADDRESS
     try:
-        with open(hack_file, "w") as f:
+        with Parser(asm_file) as p2, open(hack_file, "w") as f:
             while p2.hasMoreLines():
                 p2.advance()
                 inst_type = p2.instructionType()
@@ -59,8 +60,6 @@ def main() -> None:
                         "111" + comp(p2.comp()) + dest(p2.dest()) + jump(p2.jump())
                     )
                     f.write(bin_code + "\n")
-
-        p2.close()
     except Exception as e:
         print(f"Error: {e}")
         if os.path.exists(hack_file):

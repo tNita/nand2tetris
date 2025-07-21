@@ -11,7 +11,7 @@ class InstructionType(Enum):
 class Parser:
     def __init__(self, filename: str) -> None:
         self.filename: str = filename
-        self.file = open(filename, "r")
+        self.file = None
         self.current_line: str | None = None
 
     def hasMoreLines(self) -> bool:
@@ -82,3 +82,10 @@ class Parser:
     def close(self) -> None:
         if hasattr(self, "file") and not self.file.closed:
             self.file.close()
+
+    def __enter__(self):
+        self.file = open(self.filename, "r")
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
