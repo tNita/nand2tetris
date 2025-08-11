@@ -116,9 +116,9 @@ class CodeWriter:
                     f"@{index}",
                     "D=A",
                     f"@{base}",
-                    "A=D+M",
+                    "D=D+M",
                     "@R13",
-                    "M=A",
+                    "M=D",
                 ]
                 + POP_ASM
                 + ["@R13", "A=M", "M=D"]
@@ -145,6 +145,9 @@ class CodeWriter:
 
     def close(self):
         if hasattr(self, "file") and not self.file.closed:
+            self.file.write("(END)\n")
+            self.file.write("@END\n")
+            self.file.write("0;JMP\n")
             self.file.close()
 
     def __enter__(self):
