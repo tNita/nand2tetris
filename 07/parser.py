@@ -7,7 +7,7 @@ class CommandType(Enum):
     C_POP = 3
 
 
-# NOTE: ここでは文法的に良いかのチェックはしない
+# VMコマンドの構文解析を行う（文法チェックは行わない）
 class Parser:
     def __init__(self, filename: str) -> None:
         self.filename: str = filename
@@ -16,11 +16,11 @@ class Parser:
 
     def hasMoreLines(self) -> bool:
         pos = self.file.tell()
-        # １行読んでみる
+        # 1行読んでみる
         line = self.file.readline()
-        # 元の位置へ戻す
+        # ファイルポインタを元の位置に戻す
         self.file.seek(pos)
-        # line が空文字列(""＝EOF) でなければ True
+        # 空文字列（EOF）でなければTrue
         return bool(line)
 
     def advance(self) -> None:
@@ -31,10 +31,10 @@ class Parser:
                 return None
 
             line = self.file.readline()
-            # コメントと空白を除去
+            # コメントと前後の空白を除去
             cleaned = line.split("//", 1)[0].strip()
             if not cleaned:
-                # 空白行／コメントだけの行 → 次のループへ
+                # 空行またはコメントのみの行はスキップ
                 continue
 
             self.current_line = cleaned
@@ -50,7 +50,7 @@ class Parser:
         elif command == "pop":
             return CommandType.C_POP
         else:
-            raise Exception(f"サポート外のコマンド {command}")
+            raise Exception(f"Unsupported command: {command}")
 
     def arg1(self) -> str:
         command_type = self.commandType()
@@ -63,7 +63,7 @@ class Parser:
 
     def arg2(self) -> int:
         if self.commandType() in [CommandType.C_PUSH, CommandType.C_POP]:
-            return self.current_line.split()[2]
+            return int(self.current_line.split()[2])
 
     def close(self) -> None:
         if hasattr(self, "file") and not self.file.closed:

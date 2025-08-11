@@ -14,7 +14,7 @@ CALC_COMMAND = {
 
 COMPARE_COMMAND = {"eq": "JEQ", "gt": "JGT", "lt": "JLT"}
 
-# TODO: 名前変える
+# メモリセグメントの基底アドレス
 FIXED_MEMORY_SEGMENT = {
     "local": "LCL",
     "argument": "ARG",
@@ -44,8 +44,8 @@ class CodeWriter:
             raise Exception()
 
     def compareAsm(self, jump: str) -> list[str]:
-        label_true = f"EQ_TRUE_{self.label_counter}"
-        label_end = f"EQ_END_{self.label_counter}"
+        label_true = f"COMP_TRUE_{self.label_counter}"
+        label_end = f"COMP_END_{self.label_counter}"
         self.label_counter += 1
         return [
             "@SP",
@@ -80,7 +80,7 @@ class CodeWriter:
             self.write(self.popAsm(segment, index))
 
     def pushAsm(self, segment: str, index: int) -> list[str]:
-        # pushしたい値をDに入れた上でスタックマシンにpush
+        # 指定されたセグメントの値をスタックにプッシュするASMコードを生成
         if segment in FIXED_MEMORY_SEGMENT:
             base = FIXED_MEMORY_SEGMENT[segment]
             return [
@@ -108,7 +108,7 @@ class CodeWriter:
             raise Exception(f"Unsupported segment: {segment}")
 
     def popAsm(self, segment: str, index: int) -> list[str]:
-        # popした値を指定したメモリに格納
+        # スタックからポップした値を指定されたセグメントに格納するASMを生成
         if segment in FIXED_MEMORY_SEGMENT:
             base = FIXED_MEMORY_SEGMENT[segment]
             return (

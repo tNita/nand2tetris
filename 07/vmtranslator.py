@@ -15,7 +15,7 @@ def main():
     if not input_path.endswith(".vm"):
         print("エラー: .vmファイルを指定してください")
         sys.exit(1)
-    
+
     if not os.path.isfile(input_path):
         print("エラー: ファイルが存在しません")
         sys.exit(1)
