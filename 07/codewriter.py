@@ -35,6 +35,7 @@ class CodeWriter:
         self.current_file_name = os.path.basename(vm_file).replace(".vm", "")
 
     def writeArithmetic(self, command: str) -> None:
+        self.file.write(f"// {command} \n")
         if command in CALC_COMMAND:
             self.write(CALC_COMMAND[command])
         elif command in COMPARE_COMMAND:
@@ -72,6 +73,7 @@ class CodeWriter:
         segment: str,
         index: int,
     ) -> None:
+        self.file.write(f"// {commandType} {segment} {index} \n")
         if commandType == CommandType.C_PUSH:
             self.write(self.pushAsm(segment, index))
         elif commandType == CommandType.C_POP:
