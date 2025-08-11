@@ -7,8 +7,8 @@ CALC_COMMAND = {
     "add": ["@SP", "AM=M-1", "D=M", "A=A-1", "M=D+M"],
     "sub": ["@SP", "AM=M-1", "D=M", "A=A-1", "M=M-D"],
     "neg": ["@SP", "A=M-1", "M=-M"],
-    "and": ["@SP", "AM=M-1", "D=M", "A=A-1", "M=M&D"],
-    "or": ["@SP", "AM=M-1", "D=M", "A=A-1", "M=M|D"],
+    "and": ["@SP", "AM=M-1", "D=M", "A=A-1", "M=D&M"],
+    "or": ["@SP", "AM=M-1", "D=M", "A=A-1", "M=D|M"],
     "not": ["@SP", "A=M-1", "M=!M"],
 }
 
