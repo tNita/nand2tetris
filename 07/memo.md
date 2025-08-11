@@ -52,7 +52,7 @@ D=M
 AM=M-1
 D=M
 A=A-1
-M=M+D // *SP-1 = x + y
+M=D+M // *SP-1 = x + y
 ```
 
 ## eq

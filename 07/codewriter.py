@@ -4,7 +4,7 @@ import os
 
 
 CALC_COMMAND = {
-    "add": ["@SP", "AM=M-1", "D=M", "A=A-1", "M=M+D"],
+    "add": ["@SP", "AM=M-1", "D=M", "A=A-1", "M=D+M"],
     "sub": ["@SP", "AM=M-1", "D=M", "A=A-1", "M=M-D"],
     "neg": ["@SP", "A=M-1", "M=-M"],
     "and": ["@SP", "AM=M-1", "D=M", "A=A-1", "M=M&D"],
@@ -87,7 +87,7 @@ class CodeWriter:
                 f"@{index}",
                 "D=A",
                 f"@{base}",
-                "A=M+D",
+                "A=D+M",
                 "D=M",
             ] + PUSH_ASM
         elif segment == "pointer":
@@ -116,7 +116,7 @@ class CodeWriter:
                     f"@{index}",
                     "D=A",
                     f"@{base}",
-                    "A=M+D",
+                    "A=D+M",
                     "@R13",
                     "M=A",
                 ]
