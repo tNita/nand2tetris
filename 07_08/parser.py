@@ -79,14 +79,27 @@ class Parser:
         command_type = self.commandType()
         if command_type == CommandType.C_ARITHMETIC:
             return self.current_line.split()[0]
-        elif command_type in [CommandType.C_PUSH, CommandType.C_POP]:
+        elif command_type in [
+            CommandType.C_PUSH,
+            CommandType.C_POP,
+            CommandType.C_LABEL,
+            CommandType.C_GOTO,
+            CommandType.C_IF,
+        ]:
             return self.current_line.split()[1]
         else:
             raise Exception("arg1() called for invalid command type")
 
     def arg2(self) -> int:
-        if self.commandType() in [CommandType.C_PUSH, CommandType.C_POP]:
+        if self.commandType() in [
+            CommandType.C_PUSH,
+            CommandType.C_POP,
+            CommandType.C_FUNCTION,
+            CommandType.C_CALL,
+        ]:
             return int(self.current_line.split()[2])
+        else:
+            raise Exception("arg2() called for invalid command type")
 
     def close(self) -> None:
         if hasattr(self, "file") and not self.file.closed:
