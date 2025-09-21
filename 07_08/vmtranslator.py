@@ -33,7 +33,8 @@ def main():
                     break
 
                 command_type = parser.commandType()
-
+                # TODO: 後で消す
+                code_writer.write([f"// {parser.current_line}"])
                 if command_type == CommandType.C_ARITHMETIC:
                     code_writer.writeArithmetic(parser.arg1())
                 elif command_type in [CommandType.C_PUSH, CommandType.C_POP]:
