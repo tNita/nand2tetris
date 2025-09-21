@@ -63,7 +63,7 @@ class CodeWriter:
             f"({label_true})",
             "@SP",
             "A=M-1",
-            "M=-1",
+            "M=-1",  # 全ビットtrue
             f"({label_end})",
         ]
 
@@ -138,6 +138,16 @@ class CodeWriter:
             raise Exception(
                 f"Unsupported segment: {segment} (constant cannot be popped)"
             )
+
+    def writeLabel(self, label: str) -> None:
+        self.write([f"({label})"])
+
+    def writeGoto(self, label: str) -> None:
+        self.write([f"@{label}", "0;JMP"])
+
+    def writeIf(self, label: str) -> None:
+        asm = POP_ASM + [f"@{label}", "D;JEQ"]
+        self.write(asm)
 
     def write(self, asms: list[str]) -> None:
         for a in asms:

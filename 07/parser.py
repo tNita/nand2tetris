@@ -5,6 +5,33 @@ class CommandType(Enum):
     C_ARITHMETIC = 1
     C_PUSH = 2
     C_POP = 3
+    C_LABEL = 4
+    C_GOTO = 5
+    C_IF = 6
+    C_FUNCTION = 7
+    C_RETURN = 8
+    C_CALL = 9
+
+
+COMMAND_TYPE_MAP = {
+    "add": CommandType.C_ARITHMETIC,
+    "sub": CommandType.C_ARITHMETIC,
+    "neg": CommandType.C_ARITHMETIC,
+    "eq": CommandType.C_ARITHMETIC,
+    "gt": CommandType.C_ARITHMETIC,
+    "lt": CommandType.C_ARITHMETIC,
+    "and": CommandType.C_ARITHMETIC,
+    "or": CommandType.C_ARITHMETIC,
+    "not": CommandType.C_ARITHMETIC,
+    "push": CommandType.C_PUSH,
+    "pop": CommandType.C_POP,
+    "label": CommandType.C_LABEL,
+    "goto": CommandType.C_GOTO,
+    "if-goto": CommandType.C_IF,
+    "function": CommandType.C_FUNCTION,
+    "return": CommandType.C_RETURN,
+    "call": CommandType.C_CALL,
+}
 
 
 # VMコマンドの構文解析を行う（文法チェックは行わない）
@@ -43,12 +70,8 @@ class Parser:
     def commandType(self) -> CommandType:
         command = self.current_line.split()[0]
 
-        if command in ["add", "sub", "neg", "eq", "gt", "lt", "and", "or", "not"]:
-            return CommandType.C_ARITHMETIC
-        elif command == "push":
-            return CommandType.C_PUSH
-        elif command == "pop":
-            return CommandType.C_POP
+        if command in COMMAND_TYPE_MAP:
+            return COMMAND_TYPE_MAP[command]
         else:
             raise Exception(f"Unsupported command: {command}")
 

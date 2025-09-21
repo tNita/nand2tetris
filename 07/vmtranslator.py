@@ -40,6 +40,12 @@ def main():
                     segment = parser.arg1()
                     index = int(parser.arg2())
                     code_writer.writePushPop(command_type, segment, index)
+                elif command_type == CommandType.C_LABEL:
+                    code_writer.writeLabel(parser.arg1())
+                elif command_type == CommandType.C_GOTO:
+                    code_writer.writeGoto(parser.arg1())
+                elif command_type == CommandType.C_IF:
+                    code_writer.writeIf(parser.arg1())
 
     print(f"変換が完了しました: {output_file}")
 
