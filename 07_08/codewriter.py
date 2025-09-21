@@ -146,7 +146,7 @@ class CodeWriter:
         self.write([f"@{label}", "0;JMP"])
 
     def writeIf(self, label: str) -> None:
-        asm = POP_ASM + [f"@{label}", "D;JEQ"]
+        asm = POP_ASM + [f"@{label}", "D;JNE"]
         self.write(asm)
 
     def write(self, asms: list[str]) -> None:
@@ -155,8 +155,9 @@ class CodeWriter:
 
     def close(self):
         if hasattr(self, "file") and not self.file.closed:
-            self.file.write("(END)\n")
-            self.file.write("@END\n")
+            end_label = f"({self.current_file_name}$END_LOOP)"
+            self.file.write(f"{end_label}\n")
+            self.file.write(f"@{self.current_file_name}$END_LOOP\n")
             self.file.write("0;JMP\n")
             self.file.close()
 
