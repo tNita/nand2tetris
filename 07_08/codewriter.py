@@ -36,6 +36,10 @@ class CodeWriter:
         self.currentFile, _ = os.path.splitext(fileName)
         self.currentFunction = None
 
+    def writeBootstrap(self) -> None:
+        self.write(["@256", "D=A", "@SP", "M=D"])
+        self.writeCall("Sys.init", 0)
+
     def writeArithmetic(self, command: str) -> None:
         if command in CALC_COMMAND:
             self.write(CALC_COMMAND[command])
@@ -203,6 +207,7 @@ class CodeWriter:
 
     def setFileName(self, fileName: str) -> None:
         self.currentFile, _ = os.path.splitext(fileName)
+        self.currentFunction = None
 
     def close(self):
         if hasattr(self, "file") and not self.file.closed:

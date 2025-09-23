@@ -1,3 +1,57 @@
+@256
+D=A
+@SP
+M=D
+@Sys.init$ret.0
+D=A
+@SP
+A=M
+M=D
+@SP
+M=M+1
+@LCL
+D=M
+@SP
+A=M
+M=D
+@SP
+M=M+1
+@ARG
+D=M
+@SP
+A=M
+M=D
+@SP
+M=M+1
+@THIS
+D=M
+@SP
+A=M
+M=D
+@SP
+M=M+1
+@THAT
+D=M
+@SP
+A=M
+M=D
+@SP
+M=M+1
+@SP
+D=M
+@5
+D=D-A
+@0
+D=D-A
+@ARG
+M=D
+@SP
+D=M
+@LCL
+M=D
+@Sys.init
+0;JMP
+(Sys.init$ret.0)
 // function Class1.set 0
 (Class1.set)
 // push argument 0
@@ -337,7 +391,7 @@ M=D
 @SP
 M=M+1
 // call Class1.set 2
-@Class1.set$ret.0
+@Class1.set$ret.1
 D=A
 @SP
 A=M
@@ -386,7 +440,7 @@ D=M
 M=D
 @Class1.set
 0;JMP
-(Class1.set$ret.0)
+(Class1.set$ret.1)
 // pop temp 0
 @SP
 AM=M-1
@@ -410,7 +464,7 @@ M=D
 @SP
 M=M+1
 // call Class2.set 2
-@Class2.set$ret.1
+@Class2.set$ret.2
 D=A
 @SP
 A=M
@@ -459,7 +513,7 @@ D=M
 M=D
 @Class2.set
 0;JMP
-(Class2.set$ret.1)
+(Class2.set$ret.2)
 // pop temp 0
 @SP
 AM=M-1
@@ -467,7 +521,7 @@ D=M
 @5
 M=D
 // call Class1.get 0
-@Class1.get$ret.2
+@Class1.get$ret.3
 D=A
 @SP
 A=M
@@ -516,9 +570,9 @@ D=M
 M=D
 @Class1.get
 0;JMP
-(Class1.get$ret.2)
+(Class1.get$ret.3)
 // call Class2.get 0
-@Class2.get$ret.3
+@Class2.get$ret.4
 D=A
 @SP
 A=M
@@ -567,7 +621,7 @@ D=M
 M=D
 @Class2.get
 0;JMP
-(Class2.get$ret.3)
+(Class2.get$ret.4)
 // label END
 (Sys.init$END)
 // goto END

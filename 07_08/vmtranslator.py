@@ -70,6 +70,7 @@ def main() -> None:
     input_path = sys.argv[1]
     vm_files, output_file = collect_vm_files(input_path)
     with CodeWriter(output_file, os.path.basename(vm_files[0])) as code_writer:
+        code_writer.writeBootstrap()
         for vm_path in vm_files:
             translate_file(code_writer, vm_path)
 
