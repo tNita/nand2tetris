@@ -20,7 +20,7 @@ D=M
 A=M
 M=D
 // label LOOP
-(LOOP)
+(BasicLoop$LOOP)
 // push argument 0
 @0
 D=A
@@ -115,7 +115,7 @@ M=M+1
 @SP
 AM=M-1
 D=M
-@LOOP
+@BasicLoop$LOOP
 D;JNE
 // push local 0
 @0
@@ -128,6 +128,6 @@ A=M
 M=D
 @SP
 M=M+1
-(BasicLoop$END_LOOP)
-@BasicLoop$END_LOOP
+(END)
+@END
 0;JMP

@@ -124,6 +124,6 @@ AM=M-1
 D=M
 A=A-1
 M=D+M
-(PointerTest$END_LOOP)
-@PointerTest$END_LOOP
+(END)
+@END
 0;JMP

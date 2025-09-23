@@ -20,6 +20,6 @@ AM=M-1
 D=M
 A=A-1
 M=D+M
-(SimpleAdd$END_LOOP)
-@SimpleAdd$END_LOOP
+(END)
+@END
 0;JMP

@@ -376,6 +376,6 @@ M=D|M
 @SP
 A=M-1
 M=!M
-(StackTest$END_LOOP)
-@StackTest$END_LOOP
+(END)
+@END
 0;JMP

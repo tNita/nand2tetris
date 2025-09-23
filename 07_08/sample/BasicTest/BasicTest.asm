@@ -231,6 +231,6 @@ AM=M-1
 D=M
 A=A-1
 M=D+M
-(BasicTest$END_LOOP)
-@BasicTest$END_LOOP
+(END)
+@END
 0;JMP

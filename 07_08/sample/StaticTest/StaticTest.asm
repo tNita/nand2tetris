@@ -76,6 +76,6 @@ AM=M-1
 D=M
 A=A-1
 M=D+M
-(StaticTest$END_LOOP)
-@StaticTest$END_LOOP
+(END)
+@END
 0;JMP

@@ -36,8 +36,8 @@ COMMAND_TYPE_MAP = {
 
 # VMコマンドの構文解析を行う（文法チェックは行わない）
 class Parser:
-    def __init__(self, filename: str) -> None:
-        self.filename: str = filename
+    def __init__(self, filepath: str) -> None:
+        self.filepath: str = filepath
         self.file = None
         self.current_line: str | None = None
 
@@ -73,22 +73,15 @@ class Parser:
         if command in COMMAND_TYPE_MAP:
             return COMMAND_TYPE_MAP[command]
         else:
-            raise Exception(f"Unsupported command: {command}")
+            raise Exception(f"called for unsupported command: {command}")
 
     def arg1(self) -> str:
         command_type = self.commandType()
         if command_type == CommandType.C_ARITHMETIC:
             return self.current_line.split()[0]
-        elif command_type in [
-            CommandType.C_PUSH,
-            CommandType.C_POP,
-            CommandType.C_LABEL,
-            CommandType.C_GOTO,
-            CommandType.C_IF,
-        ]:
+        if command_type != CommandType.C_RETURN:
             return self.current_line.split()[1]
-        else:
-            raise Exception("arg1() called for invalid command type")
+        raise Exception("called for invalid command type")
 
     def arg2(self) -> int:
         if self.commandType() in [
@@ -98,15 +91,14 @@ class Parser:
             CommandType.C_CALL,
         ]:
             return int(self.current_line.split()[2])
-        else:
-            raise Exception("arg2() called for invalid command type")
+        raise Exception("called for invalid command type")
 
     def close(self) -> None:
         if hasattr(self, "file") and not self.file.closed:
             self.file.close()
 
     def __enter__(self):
-        self.file = open(self.filename, "r")
+        self.file = open(self.filepath, "r")
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):

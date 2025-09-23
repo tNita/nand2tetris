@@ -28,11 +28,13 @@ POP_ASM = ["@SP", "AM=M-1", "D=M"]
 
 
 class CodeWriter:
-    def __init__(self, output_file: str, vm_file: str):
+    def __init__(self, output_file: str, fileName: str):
         self.output_file = output_file
         self.file = open(output_file, "w")
         self.label_counter = 0
-        self.current_file_name = os.path.basename(vm_file).replace(".vm", "")
+        self.return_counter = 0
+        self.currentFile, _ = os.path.splitext(fileName)
+        self.currentFunction = None
 
     def writeArithmetic(self, command: str) -> None:
         if command in CALC_COMMAND:
@@ -101,7 +103,7 @@ class CodeWriter:
         elif segment == "constant":
             return [f"@{index}", "D=A"] + PUSH_ASM
         elif segment == "static":
-            return [f"@{self.current_file_name}.{index}", "D=M"] + PUSH_ASM
+            return [f"@{self.currentFile}.{index}", "D=M"] + PUSH_ASM
         else:
             raise Exception(f"Unsupported segment: {segment}")
 
@@ -131,32 +133,80 @@ class CodeWriter:
                 raise Exception()
             return POP_ASM + [f"@{5 + index}", "M=D"]
         elif segment == "static":
-            return POP_ASM + [f"@{self.current_file_name}.{index}", "M=D"]
+            return POP_ASM + [f"@{self.currentFile}.{index}", "M=D"]
         else:
             raise Exception(
                 f"Unsupported segment: {segment} (constant cannot be popped)"
             )
 
     def writeLabel(self, label: str) -> None:
-        self.write([f"({label})"])
+        self.write([f"({self._scopedLabel(label)})"])
 
     def writeGoto(self, label: str) -> None:
-        self.write([f"@{label}", "0;JMP"])
+        self.write([f"@{self._scopedLabel(label)}", "0;JMP"])
 
     def writeIf(self, label: str) -> None:
-        asm = POP_ASM + [f"@{label}", "D;JNE"]
+        asm = POP_ASM + [f"@{self._scopedLabel(label)}", "D;JNE"]
         self.write(asm)
+
+    def _scopedLabel(self, label: str) -> str:
+        if self.currentFunction:
+            return f"{self.currentFunction}${label}"
+        return f"{self.currentFile}${label}"
+
+    def writeFunction(self, functionName: str, nArgs: int) -> None:
+        self.currentFunction = functionName
+        self.write([f"({functionName})"])
+        for _ in range(nArgs):
+            self.writePushPop(CommandType.C_PUSH, "constant", 0)
+
+    def writeCall(self, functionName: str, nArgs: int) -> None:
+        retLabel = self._returnAddrLabel(functionName)
+        self.write([f"@{retLabel}", "D=A"] + PUSH_ASM)
+        self.write(["@LCL", "D=M"] + PUSH_ASM)
+        self.write(["@ARG", "D=M"] + PUSH_ASM)
+        self.write(["@THIS", "D=M"] + PUSH_ASM)
+        self.write(["@THAT", "D=M"] + PUSH_ASM)
+        # ARG = SP-5-nArgs
+        self.write(["@SP", "D=M", "@5", "D=D-A", f"@{nArgs}", "D=D-A", "@ARG", "M=D"])
+        # LCL = SP
+        self.write(["@SP", "D=M", "@LCL", "M=D"])
+        # goto f
+        self.write([f"@{functionName}", "0;JMP"])
+        # f label
+        self.write([f"({retLabel})"])
+
+    def writeReturn(self) -> None:
+        # use R13 for frame, R14 for retAddr
+        # frame = LCL
+        self.write(["@LCL", "D=M", "@R13", "M=D"])
+        # retAddr = *(frame-5)
+        self.write(["@R13", "D=M", "@5", "D=D-A", "A=D", "D=M", "@R14", "M=D"])
+        # *ARG = pop()
+        self.write(POP_ASM + ["@ARG", "A=M", "M=D"])
+        # SP = ARG+1
+        self.write(["@ARG", "D=M+1", "@SP", "M=D"])
+        # restore that/this/arg/lcl
+        for l in ["THAT", "THIS", "ARG", "LCL"]:
+            self.write(["@R13", "AM=M-1", "D=M", f"@{l}", "M=D"])
+        # goto retAddr
+        self.write(["@R14", "A=M", "0;JMP"])
+
+    def _returnAddrLabel(self, functionName: str) -> str:
+        label = f"{functionName}$ret.{self.return_counter}"
+        self.return_counter += 1
+        return label
 
     def write(self, asms: list[str]) -> None:
         for a in asms:
             self.file.write(a + "\n")
 
+    def setFileName(self, fileName: str) -> None:
+        self.currentFile, _ = os.path.splitext(fileName)
+
     def close(self):
         if hasattr(self, "file") and not self.file.closed:
-            end_label = f"({self.current_file_name}$END_LOOP)"
-            self.file.write(f"{end_label}\n")
-            self.file.write(f"@{self.current_file_name}$END_LOOP\n")
-            self.file.write("0;JMP\n")
+            self.write(["(END)", "@END", "0;JMP"])
             self.file.close()
 
     def __enter__(self):
