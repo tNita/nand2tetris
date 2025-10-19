@@ -1,3 +1,4 @@
+import io
 import os
 import sys
 from typing import Iterable
@@ -35,13 +36,17 @@ def _indent(element: Element, level: int = 0) -> None:
     if len(element):
         if not element.text or not element.text.strip():
             element.text = indent + "  "
-        for child in element:
+        for index, child in enumerate(element):
             _indent(child, level + 1)
             if not child.tail or not child.tail.strip():
                 child.tail = indent + "  "
+            if index == len(element) - 1 and child.tail == indent + "  ":
+                child.tail = indent
         if not element.tail or not element.tail.strip():
             element.tail = indent
     else:
+        if not element.text or not element.text.strip():
+            element.text = indent
         if level and (not element.tail or not element.tail.strip()):
             element.tail = indent
 
@@ -54,17 +59,24 @@ def compile_file(jack_path: str) -> str:
 
     output_path = jack_path[:-5] + ".xml"
     tree = ElementTree(root)
-    tree.write(output_path, encoding="utf-8", xml_declaration=False)
+    buffer = io.BytesIO()
+    tree.write(
+        buffer,
+        encoding="utf-8",
+        xml_declaration=False,
+        short_empty_elements=False,
+    )
+
+    content = buffer.getvalue().decode("utf-8").replace("\n", "\r\n")
+    with open(output_path, "w", encoding="utf-8", newline="") as output_file:
+        output_file.write(content)
     return output_path
 
 
 def process_files(jack_files: Iterable[str]) -> None:
     for jack_path in jack_files:
-        try:
-            compilation_output = compile_file(jack_path)
-            print(f"Compiled: {compilation_output}")
-        except NotImplementedError as exc:
-            print(f"Compilation skipped: {exc}")
+        compilation_output = compile_file(jack_path)
+        print(f"Compiled: {compilation_output}")
 
 
 def main() -> None:
