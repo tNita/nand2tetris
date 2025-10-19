@@ -1,9 +1,10 @@
 import os
 import sys
 from typing import Iterable
-from xml.etree.ElementTree import Element, ElementTree, SubElement
+from xml.etree.ElementTree import Element, ElementTree
 
-from jack_tokenizer import JackTokenizer, TokenType
+from compilation_engine import CompilationEngine
+from jack_tokenizer import JackTokenizer
 
 
 def collect_jack_files(input_path: str) -> list[str]:
@@ -28,53 +29,42 @@ def collect_jack_files(input_path: str) -> list[str]:
     raise Exception("Please specify a jack file or directory")
 
 
-def _token_to_value(tokenizer: JackTokenizer, token_type: TokenType) -> str:
-    if token_type == TokenType.KEYWORD:
-        return tokenizer.keyWord().value
-    if token_type == TokenType.SYMBOL:
-        return tokenizer.symbol()
-    if token_type == TokenType.IDENTIFIER:
-        return tokenizer.identifier()
-    if token_type == TokenType.INT_CONST:
-        return str(tokenizer.intVal())
-    if token_type == TokenType.STRING_CONST:
-        return tokenizer.stringVal()
-    raise Exception(f"Unsupported token type: {token_type}")
+# テストの都合に合わせてXMLにインデントを設ける
+def _indent(element: Element, level: int = 0) -> None:
+    indent = "\n" + "  " * level
+    if len(element):
+        if not element.text or not element.text.strip():
+            element.text = indent + "  "
+        for child in element:
+            _indent(child, level + 1)
+            if not child.tail or not child.tail.strip():
+                child.tail = indent + "  "
+        if not element.tail or not element.tail.strip():
+            element.tail = indent
+    else:
+        if level and (not element.tail or not element.tail.strip()):
+            element.tail = indent
 
 
-def tokenize_file(jack_path: str) -> str:
+def compile_file(jack_path: str) -> str:
     tokenizer = JackTokenizer(jack_path)
-    output_path = jack_path[:-5] + "T.xml"
+    engine = CompilationEngine(tokenizer)
+    root = engine.compileClass()
+    _indent(root)
 
-    root = Element("tokens")
-    root.text = "\n"
-
-    while tokenizer.hasMoreTokens():
-        tokenizer.advance()
-        token_type = tokenizer.tokenType()
-        value = _token_to_value(tokenizer, token_type)
-
-        token_elem = SubElement(root, token_type.value)
-        token_elem.text = f" {value} "
-        token_elem.tail = "\n"
-
+    output_path = jack_path[:-5] + ".xml"
     tree = ElementTree(root)
     tree.write(output_path, encoding="utf-8", xml_declaration=False)
-
-    with open(output_path, "r", encoding="utf-8") as f:
-        lines = f.read().splitlines()
-
-    with open(output_path, "w", encoding="utf-8", newline="") as f:
-        for line in lines:
-            f.write(line + "\r\n")
-
     return output_path
 
 
 def process_files(jack_files: Iterable[str]) -> None:
     for jack_path in jack_files:
-        output_path = tokenize_file(jack_path)
-        print(f"Tokenized: {output_path}")
+        try:
+            compilation_output = compile_file(jack_path)
+            print(f"Compiled: {compilation_output}")
+        except NotImplementedError as exc:
+            print(f"Compilation skipped: {exc}")
 
 
 def main() -> None:

@@ -22,19 +22,29 @@ for target in "$SAMPLE_ROOT"/*; do
   work_dir="$TMP_ROOT/$base_name"
 
   cp -R "$target" "$work_dir"
+  find "$work_dir" -type f -name '*.xml' -delete
 
   echo "Processing: $target"
   python "$JACK_ANALYZER" "$work_dir" >/dev/null
 
   while IFS= read -r expected; do
+    # Skip tokenizer outputs now that the analyzer only produces parse trees
+    [[ "$expected" == *T.xml ]] && continue
+
     rel_path="${expected#"${target}/"}"
     generated="$work_dir/$rel_path"
+    if [[ ! -f "$generated" ]]; then
+      echo "Missing generated file: $generated" >&2
+      status=1
+      continue
+    fi
+
     if ! diff -u "$expected" "$generated" >"$TMP_ROOT/diff"; then
       echo "Mismatch: $expected" >&2
       cat "$TMP_ROOT/diff" >&2
       status=1
     fi
-  done < <(find "$target" -type f -name '*T.xml' | sort)
+  done < <(find "$target" -type f -name '*.xml' | sort)
 done
 
 if [[ $status -ne 0 ]]; then
