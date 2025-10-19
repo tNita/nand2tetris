@@ -1,13 +1,54 @@
-from jack_tokenizer import JackTokenizer, TokenType, KeyWord
+from enum import Enum
+
+from jack_tokenizer import JackTokenizer, TokenType, KeyWord, Symbol
 from xml.etree.ElementTree import Element
-from typing import Optional
+PRIMITIVE_TYPE = (KeyWord.INT.value, KeyWord.CHAR.value, KeyWord.BOOLEAN.value)
 
-PRIMITIVE_TYPE = ("int", "char", "boolean")
+KEYWORD_SUBROUTINE = (
+    KeyWord.CONSTRUCTOR.value,
+    KeyWord.FUNCTION.value,
+    KeyWord.METHOD.value,
+)
 
-OP = ("+", "-", "*", "/", "&", "|", "<", ">", "=")
-UNARY_OP = ("-", "~")
+KEYWORD_CLASSVARDEC = (KeyWord.STATIC.value, KeyWord.FIELD.value)
 
-KEYWORD_CONSTANT = ("true", "false", "null", "this")
+OP = (
+    Symbol.PLUS.value,
+    Symbol.MINUS.value,
+    Symbol.ASTERISK.value,
+    Symbol.SLASH.value,
+    Symbol.AMPERSAND.value,
+    Symbol.PIPE.value,
+    Symbol.LT.value,
+    Symbol.GT.value,
+    Symbol.EQ.value,
+)
+UNARY_OP = (Symbol.MINUS.value, Symbol.TILDE.value)
+
+KEYWORD_CONSTANT = (
+    KeyWord.TRUE.value,
+    KeyWord.FALSE.value,
+    KeyWord.NULL.value,
+    KeyWord.THIS.value,
+)
+
+
+class ElementTag(Enum):
+    CLASS = "class"
+    CLASS_VAR_DEC = "classVarDec"
+    SUBROUTINE_DEC = "subroutineDec"
+    PARAMETER_LIST = "parameterList"
+    SUBROUTINE_BODY = "subroutineBody"
+    VAR_DEC = "varDec"
+    STATEMENTS = "statements"
+    LET_STATEMENT = "letStatement"
+    IF_STATEMENT = "ifStatement"
+    WHILE_STATEMENT = "whileStatement"
+    DO_STATEMENT = "doStatement"
+    RETURN_STATEMENT = "returnStatement"
+    EXPRESSION = "expression"
+    EXPRESSION_LIST = "expressionList"
+    TERM = "term"
 
 
 class CompilationEngine:
@@ -19,110 +60,116 @@ class CompilationEngine:
             raise Exception(f"this file is empty")
 
     def compileClass(self) -> Element:
-        ele = self._createXMLElement("class")
+        ele = self._createNonTerminalElement(ElementTag.CLASS)
 
         ele.append(self._createSpecifiedElement(KeyWord.CLASS.value))
         ele.append(self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER))
-        ele.append(self._createSpecifiedElement("{"))
+        ele.append(self._createSpecifiedElement(Symbol.LBRACE.value))
 
-        while self.tokenizer.current_token in ("static", "field"):
+        while self.tokenizer.current_token in KEYWORD_CLASSVARDEC:
             ele.append(self.compileClassVarDec())
 
-        while self.tokenizer.current_token in ("constructor", "function", "method"):
+        while self.tokenizer.current_token in KEYWORD_SUBROUTINE:
             ele.append(self.compileSubroutine())
 
-        ele.append(self._createSpecifiedElement("}"))
+        ele.append(self._createSpecifiedElement(Symbol.RBRACE.value))
         return ele
 
     def compileClassVarDec(self) -> Element:
-        if self.tokenizer.current_token not in ("static", "field"):
+        if self.tokenizer.current_token not in KEYWORD_CLASSVARDEC:
             raise Exception(f"Invalid syntax: {self.tokenizer.current_token}")
 
-        ele = self._createXMLElement("classVarDec")
+        ele = self._createNonTerminalElement(ElementTag.CLASS_VAR_DEC)
         ele.append(self._createCurrentTokenElement())
         ele.append(self._compileType())
         ele.append(self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER))
 
-        while self.tokenizer.current_token == ",":
-            ele.append(self._createSpecifiedElement(","))
+        while self.tokenizer.current_token == Symbol.COMMA.value:
+            ele.append(self._createSpecifiedElement(Symbol.COMMA.value))
             ele.append(self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER))
 
-        ele.append(self._createSpecifiedElement(";"))
+        ele.append(self._createSpecifiedElement(Symbol.SEMICOLON.value))
         return ele
 
     def compileSubroutine(self) -> Element:
-        if self.tokenizer.current_token not in ("constructor", "function", "method"):
+        if self.tokenizer.current_token not in KEYWORD_SUBROUTINE:
             raise Exception(f"Invalid syntax: {self.tokenizer.current_token}")
 
-        ele = self._createXMLElement("subroutineDec")
+        ele = self._createNonTerminalElement(ElementTag.SUBROUTINE_DEC)
         ele.append(self._createCurrentTokenElement())
-        if self.tokenizer.current_token == "void":
+        if self.tokenizer.current_token == KeyWord.VOID.value:
             ele.append(self._createCurrentTokenElement())
         else:
             ele.append(self._compileType())
         ele.append(self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER))
-        ele.append(self._createSpecifiedElement("("))
+        ele.append(self._createSpecifiedElement(Symbol.LPAREN.value))
 
         ele.append(self.compileParameterList())
-        ele.append(self._createSpecifiedElement(")"))
+        ele.append(self._createSpecifiedElement(Symbol.RPAREN.value))
         ele.append(self.compileSubroutineBody())
         return ele
 
     def compileParameterList(self) -> Element:
-        ele = self._createXMLElement("parameterList")
+        ele = self._createNonTerminalElement(ElementTag.PARAMETER_LIST)
 
-        if self.tokenizer.current_token == ")":
+        if self.tokenizer.current_token == Symbol.RPAREN.value:
             return ele
 
         while True:
             ele.append(self._compileType())
             ele.append(self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER))
 
-            if self.tokenizer.current_token != ",":
+            if self.tokenizer.current_token != Symbol.COMMA.value:
                 break
 
-            ele.append(self._createSpecifiedElement(","))
+            ele.append(self._createSpecifiedElement(Symbol.COMMA.value))
 
         return ele
 
     def compileSubroutineBody(self) -> Element:
-        ele = self._createXMLElement("subroutineBody")
-        ele.append(self._createSpecifiedElement("{"))
+        ele = self._createNonTerminalElement(ElementTag.SUBROUTINE_BODY)
+        ele.append(self._createSpecifiedElement(Symbol.LBRACE.value))
 
-        while self.tokenizer.current_token == "var":
+        while self.tokenizer.current_token == KeyWord.VAR.value:
             ele.append(self.compileVarDec())
 
         ele.append(self.compileStatements())
-        ele.append(self._createSpecifiedElement("}"))
+        ele.append(self._createSpecifiedElement(Symbol.RBRACE.value))
         return ele
 
     def compileVarDec(self) -> Element:
-        if self.tokenizer.current_token != "var":
+        if self.tokenizer.current_token != KeyWord.VAR.value:
             raise Exception(f"Invalid syntax: {self.tokenizer.current_token}")
 
-        ele = self._createXMLElement("varDec")
-        ele.append(self._createSpecifiedElement("var"))
+        ele = self._createNonTerminalElement(ElementTag.VAR_DEC)
+        ele.append(self._createSpecifiedElement(KeyWord.VAR.value))
         ele.append(self._compileType())
         ele.append(self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER))
 
-        while self.tokenizer.current_token == ",":
-            ele.append(self._createSpecifiedElement(","))
+        while self.tokenizer.current_token == Symbol.COMMA.value:
+            ele.append(self._createSpecifiedElement(Symbol.COMMA.value))
             ele.append(self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER))
 
-        ele.append(self._createSpecifiedElement(";"))
+        ele.append(self._createSpecifiedElement(Symbol.SEMICOLON.value))
         return ele
 
     def compileStatements(self) -> Element:
-        ele = self._createXMLElement("statements")
+        ele = self._createNonTerminalElement(ElementTag.STATEMENTS)
 
-        while self.tokenizer.current_token in ("let", "if", "while", "do", "return"):
-            if self.tokenizer.current_token == "let":
+        while self.tokenizer.current_token in (
+            KeyWord.LET.value,
+            KeyWord.IF.value,
+            KeyWord.WHILE.value,
+            KeyWord.DO.value,
+            KeyWord.RETURN.value,
+        ):
+            if self.tokenizer.current_token == KeyWord.LET.value:
                 ele.append(self.compileLet())
-            elif self.tokenizer.current_token == "if":
+            elif self.tokenizer.current_token == KeyWord.IF.value:
                 ele.append(self.compileIf())
-            elif self.tokenizer.current_token == "while":
+            elif self.tokenizer.current_token == KeyWord.WHILE.value:
                 ele.append(self.compileWhile())
-            elif self.tokenizer.current_token == "do":
+            elif self.tokenizer.current_token == KeyWord.DO.value:
                 ele.append(self.compileDo())
             else:
                 ele.append(self.compileReturn())
@@ -130,76 +177,76 @@ class CompilationEngine:
         return ele
 
     def compileLet(self) -> Element:
-        ele = self._createXMLElement("letStatement")
-        ele.append(self._createSpecifiedElement("let"))
+        ele = self._createNonTerminalElement(ElementTag.LET_STATEMENT)
+        ele.append(self._createSpecifiedElement(KeyWord.LET.value))
         ele.append(self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER))
 
-        if self.tokenizer.current_token == "[":
-            ele.append(self._createSpecifiedElement("["))
+        if self.tokenizer.current_token == Symbol.LBRACKET.value:
+            ele.append(self._createSpecifiedElement(Symbol.LBRACKET.value))
             ele.append(self.compileExpression())
-            ele.append(self._createSpecifiedElement("]"))
+            ele.append(self._createSpecifiedElement(Symbol.RBRACKET.value))
 
-        ele.append(self._createSpecifiedElement("="))
+        ele.append(self._createSpecifiedElement(Symbol.EQ.value))
         ele.append(self.compileExpression())
-        ele.append(self._createSpecifiedElement(";"))
+        ele.append(self._createSpecifiedElement(Symbol.SEMICOLON.value))
         return ele
 
     def compileIf(self) -> Element:
-        ele = self._createXMLElement("ifStatement")
-        ele.append(self._createSpecifiedElement("if"))
-        ele.append(self._createSpecifiedElement("("))
+        ele = self._createNonTerminalElement(ElementTag.IF_STATEMENT)
+        ele.append(self._createSpecifiedElement(KeyWord.IF.value))
+        ele.append(self._createSpecifiedElement(Symbol.LPAREN.value))
         ele.append(self.compileExpression())
-        ele.append(self._createSpecifiedElement(")"))
-        ele.append(self._createSpecifiedElement("{"))
+        ele.append(self._createSpecifiedElement(Symbol.RPAREN.value))
+        ele.append(self._createSpecifiedElement(Symbol.LBRACE.value))
         ele.append(self.compileStatements())
-        ele.append(self._createSpecifiedElement("}"))
+        ele.append(self._createSpecifiedElement(Symbol.RBRACE.value))
 
-        if self.tokenizer.current_token == "else":
-            ele.append(self._createSpecifiedElement("else"))
-            ele.append(self._createSpecifiedElement("{"))
+        if self.tokenizer.current_token == KeyWord.ELSE.value:
+            ele.append(self._createSpecifiedElement(KeyWord.ELSE.value))
+            ele.append(self._createSpecifiedElement(Symbol.LBRACE.value))
             ele.append(self.compileStatements())
-            ele.append(self._createSpecifiedElement("}"))
+            ele.append(self._createSpecifiedElement(Symbol.RBRACE.value))
 
         return ele
 
     def compileWhile(self) -> Element:
-        ele = self._createXMLElement("whileStatement")
-        ele.append(self._createSpecifiedElement("while"))
-        ele.append(self._createSpecifiedElement("("))
+        ele = self._createNonTerminalElement(ElementTag.WHILE_STATEMENT)
+        ele.append(self._createSpecifiedElement(KeyWord.WHILE.value))
+        ele.append(self._createSpecifiedElement(Symbol.LPAREN.value))
         ele.append(self.compileExpression())
-        ele.append(self._createSpecifiedElement(")"))
-        ele.append(self._createSpecifiedElement("{"))
+        ele.append(self._createSpecifiedElement(Symbol.RPAREN.value))
+        ele.append(self._createSpecifiedElement(Symbol.LBRACE.value))
         ele.append(self.compileStatements())
-        ele.append(self._createSpecifiedElement("}"))
+        ele.append(self._createSpecifiedElement(Symbol.RBRACE.value))
         return ele
 
     def compileDo(self) -> Element:
-        ele = self._createXMLElement("doStatement")
-        ele.append(self._createSpecifiedElement("do"))
+        ele = self._createNonTerminalElement(ElementTag.DO_STATEMENT)
+        ele.append(self._createSpecifiedElement(KeyWord.DO.value))
         ele.append(self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER))
 
-        if self.tokenizer.current_token == ".":
-            ele.append(self._createSpecifiedElement("."))
+        if self.tokenizer.current_token == Symbol.DOT.value:
+            ele.append(self._createSpecifiedElement(Symbol.DOT.value))
             ele.append(self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER))
 
-        ele.append(self._createSpecifiedElement("("))
+        ele.append(self._createSpecifiedElement(Symbol.LPAREN.value))
         ele.append(self.compileExpressionList())
-        ele.append(self._createSpecifiedElement(")"))
-        ele.append(self._createSpecifiedElement(";"))
+        ele.append(self._createSpecifiedElement(Symbol.RPAREN.value))
+        ele.append(self._createSpecifiedElement(Symbol.SEMICOLON.value))
         return ele
 
     def compileReturn(self) -> Element:
-        ele = self._createXMLElement("returnStatement")
-        ele.append(self._createSpecifiedElement("return"))
+        ele = self._createNonTerminalElement(ElementTag.RETURN_STATEMENT)
+        ele.append(self._createSpecifiedElement(KeyWord.RETURN.value))
 
-        if self.tokenizer.current_token != ";":
+        if self.tokenizer.current_token != Symbol.SEMICOLON.value:
             ele.append(self.compileExpression())
 
-        ele.append(self._createSpecifiedElement(";"))
+        ele.append(self._createSpecifiedElement(Symbol.SEMICOLON.value))
         return ele
 
     def compileExpression(self) -> Element:
-        ele = self._createXMLElement("expression")
+        ele = self._createNonTerminalElement(ElementTag.EXPRESSION)
         ele.append(self.compileTerm())
         while self.tokenizer.current_token in OP:
             ele.append(self._createCurrentTokenElement())
@@ -207,18 +254,18 @@ class CompilationEngine:
         return ele
 
     def compileExpressionList(self) -> Element:
-        ele = self._createXMLElement("expressionList")
-        if self.tokenizer.current_token == ")":
+        ele = self._createNonTerminalElement(ElementTag.EXPRESSION_LIST)
+        if self.tokenizer.current_token == Symbol.RPAREN.value:
             return ele
 
         ele.append(self.compileExpression())
-        while self.tokenizer.current_token == ",":
-            ele.append(self._createSpecifiedElement(","))
+        while self.tokenizer.current_token == Symbol.COMMA.value:
+            ele.append(self._createSpecifiedElement(Symbol.COMMA.value))
             ele.append(self.compileExpression())
         return ele
 
     def compileTerm(self) -> Element:
-        ele = self._createXMLElement("term")
+        ele = self._createNonTerminalElement(ElementTag.TERM)
         if self.tokenizer.tokenType() in (TokenType.INT_CONST, TokenType.STRING_CONST):
             ele.append(self._createCurrentTokenElement())
             return ele
@@ -227,10 +274,10 @@ class CompilationEngine:
             ele.append(self._createCurrentTokenElement())
             return ele
 
-        if self.tokenizer.current_token == "(":
-            ele.append(self._createSpecifiedElement("("))
+        if self.tokenizer.current_token == Symbol.LPAREN.value:
+            ele.append(self._createSpecifiedElement(Symbol.LPAREN.value))
             ele.append(self.compileExpression())
-            ele.append(self._createSpecifiedElement(")"))
+            ele.append(self._createSpecifiedElement(Symbol.RPAREN.value))
             return ele
 
         if self.tokenizer.current_token in UNARY_OP:
@@ -243,20 +290,20 @@ class CompilationEngine:
 
         # 先読みが必要なもの
         ele.append(self._createCurrentTokenElement())
-        if self.tokenizer.current_token == "[":
-            ele.append(self._createSpecifiedElement("["))
+        if self.tokenizer.current_token == Symbol.LBRACKET.value:
+            ele.append(self._createSpecifiedElement(Symbol.LBRACKET.value))
             ele.append(self.compileExpression())
-            ele.append(self._createSpecifiedElement("]"))
-        elif self.tokenizer.current_token == "(":
-            ele.append(self._createSpecifiedElement("("))
+            ele.append(self._createSpecifiedElement(Symbol.RBRACKET.value))
+        elif self.tokenizer.current_token == Symbol.LPAREN.value:
+            ele.append(self._createSpecifiedElement(Symbol.LPAREN.value))
             ele.append(self.compileExpressionList())
-            ele.append(self._createSpecifiedElement(")"))
-        elif self.tokenizer.current_token == ".":
-            ele.append(self._createSpecifiedElement("."))
+            ele.append(self._createSpecifiedElement(Symbol.RPAREN.value))
+        elif self.tokenizer.current_token == Symbol.DOT.value:
+            ele.append(self._createSpecifiedElement(Symbol.DOT.value))
             ele.append(self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER))
-            ele.append(self._createSpecifiedElement("("))
+            ele.append(self._createSpecifiedElement(Symbol.LPAREN.value))
             ele.append(self.compileExpressionList())
-            ele.append(self._createSpecifiedElement(")"))
+            ele.append(self._createSpecifiedElement(Symbol.RPAREN.value))
         return ele
 
     def _compileType(self) -> Element:
@@ -277,9 +324,10 @@ class CompilationEngine:
         return self._createCurrentTokenElement()
 
     def _createCurrentTokenElement(self) -> Element:
-        ele = self._createXMLElement(
-            self.tokenizer.tokenType().value, self._currentTokenValue()
-        )
+        token_tag = self.tokenizer.tokenType().value
+        text = self._currentTokenValue()
+        ele = self._createTerminalElement(token_tag, text)
+
         if self.tokenizer.hasMoreTokens():
             self.tokenizer.advance()
         return ele
@@ -291,15 +339,16 @@ class CompilationEngine:
         ele = self._createCurrentTokenElement()
         return ele
 
-    def _createXMLElement(self, tag: str, text: Optional[str] = None) -> Element:
-        ele = Element(tag)
+    def _createNonTerminalElement(self, tag: ElementTag) -> Element:
+        ele = Element(tag.value)
         ele.tail = "\n"
-        if text is not None:
-            ele.text = f" {text} "
         return ele
 
-    def _createTokenElement(self, tokenType: TokenType, value: str) -> Element:
-        return self._createXMLElement(tokenType.value, value)
+    def _createTerminalElement(self, tag: str, text: str) -> Element:
+        ele = Element(tag)
+        ele.tail = "\n"
+        ele.text = f" {text} "
+        return ele
 
     def _currentTokenValue(self) -> str:
         token_type = self.tokenizer.tokenType()

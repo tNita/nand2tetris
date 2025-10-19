@@ -1,6 +1,6 @@
 from enum import Enum
 import re
-from typing import Optional, List
+from typing import Optional
 
 
 class TokenType(Enum):
@@ -42,32 +42,31 @@ class KeyWord(Enum):
             return None
 
 
-JACK_SYMBOLS: List[str] = [
-    "{",
-    "}",
-    "(",
-    ")",
-    "[",
-    "]",
-    ".",
-    ",",
-    ";",
-    "+",
-    "-",
-    "*",
-    "/",
-    "&",
-    "|",
-    "<",
-    ">",
-    "=",
-    "~",
-]
+class Symbol(Enum):
+    LBRACE = "{"
+    RBRACE = "}"
+    LPAREN = "("
+    RPAREN = ")"
+    LBRACKET = "["
+    RBRACKET = "]"
+    DOT = "."
+    COMMA = ","
+    SEMICOLON = ";"
+    PLUS = "+"
+    MINUS = "-"
+    ASTERISK = "*"
+    SLASH = "/"
+    AMPERSAND = "&"
+    PIPE = "|"
+    LT = "<"
+    GT = ">"
+    EQ = "="
+    TILDE = "~"
 
 KEYWORD_PATTERN = (
     r"(?P<KEYWORD>" + "|".join(e.value for e in KeyWord) + r")(?![A-Za-z0-9_])"
 )
-SYMBOL_PATTERN = r"(?P<SYMBOL>" + "|".join(re.escape(s) for s in JACK_SYMBOLS) + r")"
+SYMBOL_PATTERN = r"(?P<SYMBOL>" + "|".join(re.escape(s.value) for s in Symbol) + r")"
 # 0から32767
 INT_CONST_PATTERN = r"(?P<INT_CONST>3276[0-7]|327[0-5]\d|32[0-6]\d{2}|3[0-1]\d{3}|[1-2]\d{4}|[1-9]\d{1,3}|\d)"
 STRING_CONST_PATTERN = r'(?P<STRING_CONST>"[^"\n]*")'
