@@ -1,16 +1,11 @@
 from enum import Enum
+from typing import Optional
 
 from jack_tokenizer import JackTokenizer, TokenType, KeyWord, Symbol
+from symbol import IdentifierKind, SymbolTable
 from xml.etree.ElementTree import Element
+
 PRIMITIVE_TYPE = (KeyWord.INT.value, KeyWord.CHAR.value, KeyWord.BOOLEAN.value)
-
-KEYWORD_SUBROUTINE = (
-    KeyWord.CONSTRUCTOR.value,
-    KeyWord.FUNCTION.value,
-    KeyWord.METHOD.value,
-)
-
-KEYWORD_CLASSVARDEC = (KeyWord.STATIC.value, KeyWord.FIELD.value)
 
 OP = (
     Symbol.PLUS.value,
@@ -32,6 +27,14 @@ KEYWORD_CONSTANT = (
     KeyWord.THIS.value,
 )
 
+KEYWORD_SUBROUTINE = (
+    KeyWord.CONSTRUCTOR.value,
+    KeyWord.FUNCTION.value,
+    KeyWord.METHOD.value,
+)
+
+KEYWORD_CLASSVARDEC = (KeyWord.STATIC.value, KeyWord.FIELD.value)
+
 
 class ElementTag(Enum):
     CLASS = "class"
@@ -51,19 +54,60 @@ class ElementTag(Enum):
     TERM = "term"
 
 
+class Usage(Enum):
+    DEFINED = "defined"
+    USED = "used"
+
+
+class SymbolCategory(Enum):
+    FIELD = "field"
+    STATIC = "static"
+    VAR = "var"
+    ARGUMENT = "argument"
+    CLASS = "class"
+    SUBROUTINE = "subroutine"
+
+    @classmethod
+    def fromIdentifierKind(cls, kind: IdentifierKind) -> "SymbolCategory":
+        mapping = {
+            IdentifierKind.STATIC: cls.STATIC,
+            IdentifierKind.FIELD: cls.FIELD,
+            IdentifierKind.ARG: cls.ARGUMENT,
+            IdentifierKind.VAR: cls.VAR,
+        }
+        return mapping[kind]
+
+
 class CompilationEngine:
     def __init__(self, tokenizer: JackTokenizer) -> None:
         self.tokenizer = tokenizer
+        self.class_table = SymbolTable()
+        self.subroutineTable = SymbolTable()
+        self.currentClassName: Optional[str] = None
+
         if self.tokenizer.hasMoreTokens():
             self.tokenizer.advance()
         else:
-            raise Exception(f"this file is empty")
+            raise Exception("this file is empty")
 
     def compileClass(self) -> Element:
         ele = self._createNonTerminalElement(ElementTag.CLASS)
 
         ele.append(self._createSpecifiedElement(KeyWord.CLASS.value))
-        ele.append(self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER))
+
+        if self.tokenizer.tokenType() != TokenType.IDENTIFIER:
+            raise Exception(f"Invalid class name: {self.tokenizer.current_token}")
+        class_name = self._currentTokenValue()
+        class_identifier = self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER)
+        self._setSymbolAttributes(
+            class_identifier,
+            name=class_name,
+            category=SymbolCategory.CLASS,
+            usage=Usage.DEFINED,
+        )
+        ele.append(class_identifier)
+        self.currentClassName = class_name
+
         ele.append(self._createSpecifiedElement(Symbol.LBRACE.value))
 
         while self.tokenizer.current_token in KEYWORD_CLASSVARDEC:
@@ -80,13 +124,42 @@ class CompilationEngine:
             raise Exception(f"Invalid syntax: {self.tokenizer.current_token}")
 
         ele = self._createNonTerminalElement(ElementTag.CLASS_VAR_DEC)
+
+        kindStr = self._currentTokenValue()
+        kind = IdentifierKind.fromStr(kindStr)
+        if not kind:
+            raise Exception(f"Unsupported class variable kind: {kindStr}")
         ele.append(self._createCurrentTokenElement())
-        ele.append(self._compileType())
-        ele.append(self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER))
+
+        typeStr = self._currentTokenValue()
+        type_element = self._compileType()
+        ele.append(type_element)
+
+        name = self._currentTokenValue()
+        identifierEle = self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER)
+        index = self._defineSymbol(self.class_table, name, typeStr, kind)
+        self._setSymbolAttributes(
+            identifierEle,
+            name=name,
+            category=SymbolCategory.fromIdentifierKind(kind),
+            usage=Usage.DEFINED,
+            index=index,
+        )
+        ele.append(identifierEle)
 
         while self.tokenizer.current_token == Symbol.COMMA.value:
             ele.append(self._createSpecifiedElement(Symbol.COMMA.value))
-            ele.append(self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER))
+            name = self._currentTokenValue()
+            identifierEle = self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER)
+            index = self._defineSymbol(self.class_table, name, typeStr, kind)
+            self._setSymbolAttributes(
+                identifierEle,
+                name=name,
+                category=SymbolCategory.fromIdentifierKind(kind),
+                usage=Usage.DEFINED,
+                index=index,
+            )
+            ele.append(identifierEle)
 
         ele.append(self._createSpecifiedElement(Symbol.SEMICOLON.value))
         return ele
@@ -95,14 +168,36 @@ class CompilationEngine:
         if self.tokenizer.current_token not in KEYWORD_SUBROUTINE:
             raise Exception(f"Invalid syntax: {self.tokenizer.current_token}")
 
+        subroutineKind = self.tokenizer.keyWord()
         ele = self._createNonTerminalElement(ElementTag.SUBROUTINE_DEC)
         ele.append(self._createCurrentTokenElement())
+
         if self.tokenizer.current_token == KeyWord.VOID.value:
             ele.append(self._createCurrentTokenElement())
         else:
             ele.append(self._compileType())
-        ele.append(self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER))
+
+        if self.tokenizer.tokenType() != TokenType.IDENTIFIER:
+            raise Exception(f"Invalid subroutine name: {self.tokenizer.current_token}")
+        name = self._currentTokenValue()
+        identifierEle = self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER)
+        self._setSymbolAttributes(
+            identifierEle,
+            name=name,
+            category=SymbolCategory.SUBROUTINE,
+            usage=Usage.DEFINED,
+        )
+        ele.append(identifierEle)
+
         ele.append(self._createSpecifiedElement(Symbol.LPAREN.value))
+
+        self.subroutineTable = SymbolTable()
+        if subroutineKind == KeyWord.METHOD:
+            if not self.currentClassName:
+                raise Exception("Class name must be set before compiling methods")
+            self._defineSymbol(
+                self.subroutineTable, "this", self.currentClassName, IdentifierKind.ARG
+            )
 
         ele.append(self.compileParameterList())
         ele.append(self._createSpecifiedElement(Symbol.RPAREN.value))
@@ -116,8 +211,27 @@ class CompilationEngine:
             return ele
 
         while True:
-            ele.append(self._compileType())
-            ele.append(self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER))
+            typeStr = self._currentTokenValue()
+            typeEle = self._compileType()
+            ele.append(typeEle)
+
+            if self.tokenizer.tokenType() != TokenType.IDENTIFIER:
+                raise Exception(
+                    f"Invalid parameter name: {self.tokenizer.current_token}"
+                )
+            name = self._currentTokenValue()
+            identifierEle = self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER)
+            index = self._defineSymbol(
+                self.subroutineTable, name, typeStr, IdentifierKind.ARG
+            )
+            self._setSymbolAttributes(
+                identifierEle,
+                name=name,
+                category=SymbolCategory.ARGUMENT,
+                usage=Usage.DEFINED,
+                index=index,
+            )
+            ele.append(identifierEle)
 
             if self.tokenizer.current_token != Symbol.COMMA.value:
                 break
@@ -143,12 +257,46 @@ class CompilationEngine:
 
         ele = self._createNonTerminalElement(ElementTag.VAR_DEC)
         ele.append(self._createSpecifiedElement(KeyWord.VAR.value))
-        ele.append(self._compileType())
-        ele.append(self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER))
+
+        typeStr = self._currentTokenValue()
+        typeEle = self._compileType()
+        ele.append(typeEle)
+
+        if self.tokenizer.tokenType() != TokenType.IDENTIFIER:
+            raise Exception(f"Invalid variable name: {self.tokenizer.current_token}")
+        name = self._currentTokenValue()
+        identifierEle = self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER)
+        index = self._defineSymbol(
+            self.subroutineTable, name, typeStr, IdentifierKind.VAR
+        )
+        self._setSymbolAttributes(
+            identifierEle,
+            name=name,
+            category=SymbolCategory.VAR,
+            usage=Usage.DEFINED,
+            index=index,
+        )
+        ele.append(identifierEle)
 
         while self.tokenizer.current_token == Symbol.COMMA.value:
             ele.append(self._createSpecifiedElement(Symbol.COMMA.value))
-            ele.append(self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER))
+            if self.tokenizer.tokenType() != TokenType.IDENTIFIER:
+                raise Exception(
+                    f"Invalid variable name: {self.tokenizer.current_token}"
+                )
+            name = self._currentTokenValue()
+            identifierEle = self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER)
+            index = self._defineSymbol(
+                self.subroutineTable, name, typeStr, IdentifierKind.VAR
+            )
+            self._setSymbolAttributes(
+                identifierEle,
+                name=name,
+                category=SymbolCategory.VAR,
+                usage=Usage.DEFINED,
+                index=index,
+            )
+            ele.append(identifierEle)
 
         ele.append(self._createSpecifiedElement(Symbol.SEMICOLON.value))
         return ele
@@ -289,7 +437,7 @@ class CompilationEngine:
             raise Exception(f"Invalid syntax {self.tokenizer.current_token}")
 
         # 先読みが必要なもの
-        ele.append(self._createCurrentTokenElement())
+        ele.append(self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER))
         if self.tokenizer.current_token == Symbol.LBRACKET.value:
             ele.append(self._createSpecifiedElement(Symbol.LBRACKET.value))
             ele.append(self.compileExpression())
@@ -321,7 +469,23 @@ class CompilationEngine:
     def _createSpecifiedTokenTypeElement(self, tokenType: TokenType) -> Element:
         if self.tokenizer.tokenType() != tokenType:
             raise Exception(f"Invalid syntax: {self.tokenizer.current_token}")
-        return self._createCurrentTokenElement()
+
+        literal = self._currentTokenValue()
+        ele = self._createCurrentTokenElement()
+
+        if tokenType == TokenType.IDENTIFIER:
+            ele.set("name", literal)
+            lookup = self._lookupSymbol(literal)
+            if lookup:
+                category, index = lookup
+                self._setSymbolAttributes(
+                    ele,
+                    name=literal,
+                    category=category,
+                    usage=Usage.USED,
+                    index=index,
+                )
+        return ele
 
     def _createCurrentTokenElement(self) -> Element:
         token_tag = self.tokenizer.tokenType().value
@@ -336,8 +500,7 @@ class CompilationEngine:
         if self.tokenizer.current_token != token:
             raise Exception(f"Invalid syntax: {self.tokenizer.current_token}")
 
-        ele = self._createCurrentTokenElement()
-        return ele
+        return self._createCurrentTokenElement()
 
     def _createNonTerminalElement(self, tag: ElementTag) -> Element:
         ele = Element(tag.value)
@@ -349,6 +512,40 @@ class CompilationEngine:
         ele.tail = "\n"
         ele.text = f" {text} "
         return ele
+
+    def _setSymbolAttributes(
+        self,
+        element: Element,
+        *,
+        name: str,
+        category: SymbolCategory,
+        usage: Usage,
+        index: Optional[int] = None,
+    ) -> None:
+        element.set("name", name)
+        element.set("category", category.value)
+        element.set("usage", usage.value)
+        if index is not None:
+            element.set("index", str(index))
+
+    def _defineSymbol(
+        self, table: SymbolTable, name: str, type_name: str, kind: IdentifierKind
+    ) -> int:
+        table.define(name, type_name, kind)
+        return table.indexOf(name)
+
+    def _lookupSymbol(self, name: str) -> Optional[tuple[SymbolCategory, int]]:
+        if self.subroutineTable.hasName(name):
+            kind = self.subroutineTable.kindOf(name)
+            index = self.subroutineTable.indexOf(name)
+            category = SymbolCategory.fromIdentifierKind(kind)
+            return category, index
+        if self.class_table.hasName(name):
+            kind = self.class_table.kindOf(name)
+            index = self.class_table.indexOf(name)
+            category = SymbolCategory.fromIdentifierKind(kind)
+            return category, index
+        return None
 
     def _currentTokenValue(self) -> str:
         token_type = self.tokenizer.tokenType()
