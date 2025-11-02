@@ -4,20 +4,35 @@ from typing import Optional
 from jack_tokenizer import JackTokenizer, TokenType, KeyWord, Symbol
 from symbol import IdentifierKind, SymbolTable
 from xml.etree.ElementTree import Element
+from vm_writer import ArithmeticCommand, VMWriter, Segment
+from char_code import CHAR_TO_CODE
+
+
+import logging
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.DEBUG, format="%(asctime)s %(name)s %(levelname)s: %(message)s"
+)
+
 
 PRIMITIVE_TYPE = (KeyWord.INT.value, KeyWord.CHAR.value, KeyWord.BOOLEAN.value)
 
-OP = (
-    Symbol.PLUS.value,
-    Symbol.MINUS.value,
-    Symbol.ASTERISK.value,
-    Symbol.SLASH.value,
-    Symbol.AMPERSAND.value,
-    Symbol.PIPE.value,
-    Symbol.LT.value,
-    Symbol.GT.value,
-    Symbol.EQ.value,
-)
+ARITHMETIC_OP_MAP = {
+    Symbol.PLUS.value: ArithmeticCommand.ADD,
+    Symbol.MINUS.value: ArithmeticCommand.SUB,
+    Symbol.AMPERSAND.value: ArithmeticCommand.AND,
+    Symbol.PIPE.value: ArithmeticCommand.OR,
+    Symbol.LT.value: ArithmeticCommand.LT,
+    Symbol.GT.value: ArithmeticCommand.GT,
+    Symbol.EQ.value: ArithmeticCommand.EQ,
+}
+
+OS_OP_MAP = {
+    Symbol.ASTERISK.value: "Math.multiply",
+    Symbol.SLASH.value: "Math.divide",
+}
+
 UNARY_OP = (Symbol.MINUS.value, Symbol.TILDE.value)
 
 KEYWORD_CONSTANT = (
@@ -78,118 +93,89 @@ class SymbolCategory(Enum):
         return mapping[kind]
 
 
+LABEL_BASE = "L{0}"
+
+
 class CompilationEngine:
-    def __init__(self, tokenizer: JackTokenizer) -> None:
+    def __init__(self, tokenizer: JackTokenizer, fileName: str) -> None:
         self.tokenizer = tokenizer
-        self.class_table = SymbolTable()
+        self.classTable = SymbolTable()
         self.subroutineTable = SymbolTable()
         self.currentClassName: Optional[str] = None
+        self.labelNum = 0
+        self.vmWriter = VMWriter(fileName)
 
         if self.tokenizer.hasMoreTokens():
             self.tokenizer.advance()
         else:
             raise Exception("this file is empty")
 
-    def compileClass(self) -> Element:
-        ele = self._createNonTerminalElement(ElementTag.CLASS)
+    def compileClass(self) -> None:
 
-        ele.append(self._createSpecifiedElement(KeyWord.CLASS.value))
-
+        self._eatSpecified(KeyWord.CLASS.value)
         if self.tokenizer.tokenType() != TokenType.IDENTIFIER:
-            raise Exception(f"Invalid class name: {self.tokenizer.current_token}")
-        class_name = self._currentTokenValue()
-        class_identifier = self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER)
-        self._setSymbolAttributes(
-            class_identifier,
-            name=class_name,
-            category=SymbolCategory.CLASS,
-            usage=Usage.DEFINED,
-        )
-        ele.append(class_identifier)
-        self.currentClassName = class_name
+            raise Exception(f"Invalid class name: {self._currentTokenValue()}")
+        self.currentClassName = self._currentTokenValue()
+        self._eatCurrentToken()
+        self._eatSpecified(Symbol.LBRACE.value)
 
-        ele.append(self._createSpecifiedElement(Symbol.LBRACE.value))
+        while self._currentTokenValue() in KEYWORD_CLASSVARDEC:
+            self.compileClassVarDec()
 
-        while self.tokenizer.current_token in KEYWORD_CLASSVARDEC:
-            ele.append(self.compileClassVarDec())
+        while self._currentTokenValue() in KEYWORD_SUBROUTINE:
+            self.compileSubroutine()
 
-        while self.tokenizer.current_token in KEYWORD_SUBROUTINE:
-            ele.append(self.compileSubroutine())
+        self._eatSpecified(Symbol.RBRACE.value)
 
-        ele.append(self._createSpecifiedElement(Symbol.RBRACE.value))
-        return ele
-
-    def compileClassVarDec(self) -> Element:
-        if self.tokenizer.current_token not in KEYWORD_CLASSVARDEC:
-            raise Exception(f"Invalid syntax: {self.tokenizer.current_token}")
-
-        ele = self._createNonTerminalElement(ElementTag.CLASS_VAR_DEC)
+    def compileClassVarDec(self) -> None:
+        if self._currentTokenValue() not in KEYWORD_CLASSVARDEC:
+            raise Exception(f"Invalid syntax: {self._currentTokenValue()}")
 
         kindStr = self._currentTokenValue()
-        kind = IdentifierKind.fromStr(kindStr)
-        if not kind:
+        if kindStr not in (IdentifierKind.STATIC.value, IdentifierKind.FIELD.value):
             raise Exception(f"Unsupported class variable kind: {kindStr}")
-        ele.append(self._createCurrentTokenElement())
-
-        typeStr = self._currentTokenValue()
-        type_element = self._compileType()
-        ele.append(type_element)
-
-        name = self._currentTokenValue()
-        identifierEle = self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER)
-        index = self._defineSymbol(self.class_table, name, typeStr, kind)
-        self._setSymbolAttributes(
-            identifierEle,
-            name=name,
-            category=SymbolCategory.fromIdentifierKind(kind),
-            usage=Usage.DEFINED,
-            index=index,
+        kind = (
+            IdentifierKind.STATIC
+            if kindStr == IdentifierKind.STATIC.value
+            else IdentifierKind.FIELD
         )
-        ele.append(identifierEle)
+        segment = Segment.STATIC if kind == IdentifierKind.STATIC else Segment.THIS
 
-        while self.tokenizer.current_token == Symbol.COMMA.value:
-            ele.append(self._createSpecifiedElement(Symbol.COMMA.value))
+        self._eatCurrentToken()
+        typeStr = self._currentTokenValue()
+        self._compileType()
+        name = self._currentTokenValue()
+        self._eatSpecifiedTokenType(TokenType.IDENTIFIER)
+        self._defineSymbol(self.classTable, name, typeStr, kind)
+
+        self.vmWriter.writePush(segment, self.classTable.indexOf(name))
+
+        while self._currentTokenValue() == Symbol.COMMA.value:
+            self._eatSpecified(Symbol.COMMA.value)
             name = self._currentTokenValue()
-            identifierEle = self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER)
-            index = self._defineSymbol(self.class_table, name, typeStr, kind)
-            self._setSymbolAttributes(
-                identifierEle,
-                name=name,
-                category=SymbolCategory.fromIdentifierKind(kind),
-                usage=Usage.DEFINED,
-                index=index,
-            )
-            ele.append(identifierEle)
+            self._eatSpecifiedTokenType(TokenType.IDENTIFIER)
+            self._defineSymbol(self.classTable, name, typeStr, kind)
+            self.vmWriter.writePush(segment, self.classTable.indexOf(name))
 
-        ele.append(self._createSpecifiedElement(Symbol.SEMICOLON.value))
-        return ele
+        self._eatSpecified(Symbol.SEMICOLON.value)
 
-    def compileSubroutine(self) -> Element:
-        if self.tokenizer.current_token not in KEYWORD_SUBROUTINE:
-            raise Exception(f"Invalid syntax: {self.tokenizer.current_token}")
+    def compileSubroutine(self) -> None:
+        if self._currentTokenValue() not in KEYWORD_SUBROUTINE:
+            raise Exception(f"Invalid syntax: {self._currentTokenValue()}")
 
         subroutineKind = self.tokenizer.keyWord()
-        ele = self._createNonTerminalElement(ElementTag.SUBROUTINE_DEC)
-        ele.append(self._createCurrentTokenElement())
+        self._eatCurrentToken()
 
-        if self.tokenizer.current_token == KeyWord.VOID.value:
-            ele.append(self._createCurrentTokenElement())
+        if self._currentTokenValue() == KeyWord.VOID.value:
+            self._eatCurrentToken()
         else:
-            ele.append(self._compileType())
+            self._compileType()
 
         if self.tokenizer.tokenType() != TokenType.IDENTIFIER:
-            raise Exception(f"Invalid subroutine name: {self.tokenizer.current_token}")
-        name = self._currentTokenValue()
-        identifierEle = self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER)
-        self._setSymbolAttributes(
-            identifierEle,
-            name=name,
-            category=SymbolCategory.SUBROUTINE,
-            usage=Usage.DEFINED,
-        )
-        ele.append(identifierEle)
-
-        ele.append(self._createSpecifiedElement(Symbol.LPAREN.value))
+            raise Exception(f"Invalid subroutine name: {self._currentTokenValue()}")
+        subroutineName = self._currentTokenValue()
+        self._eatSpecifiedTokenType(TokenType.IDENTIFIER)
+        self._eatSpecified(Symbol.LPAREN.value)
 
         self.subroutineTable = SymbolTable()
         if subroutineKind == KeyWord.METHOD:
@@ -199,334 +185,357 @@ class CompilationEngine:
                 self.subroutineTable, "this", self.currentClassName, IdentifierKind.ARG
             )
 
-        ele.append(self.compileParameterList())
-        ele.append(self._createSpecifiedElement(Symbol.RPAREN.value))
-        ele.append(self.compileSubroutineBody())
-        return ele
+        self.compileParameterList()
+        self._eatSpecified(Symbol.RPAREN.value)
 
-    def compileParameterList(self) -> Element:
-        ele = self._createNonTerminalElement(ElementTag.PARAMETER_LIST)
+        # サブルーチン本体をコンパイル
+        self._eatSpecified(Symbol.LBRACE.value)
 
-        if self.tokenizer.current_token == Symbol.RPAREN.value:
-            return ele
+        while self._currentTokenValue() == KeyWord.VAR.value:
+            self.compileVarDec()
+
+        self.vmWriter.writeFunction(
+            f"{self.currentClassName}.{subroutineName}",
+            self.subroutineTable.varCount(IdentifierKind.VAR),
+        )
+
+        if subroutineKind == KeyWord.METHOD:
+            self.vmWriter.writePush(Segment.ARGUMENT, 0)
+            self.vmWriter.writePop(Segment.POINTER, 0)
+
+        if subroutineKind == KeyWord.CONSTRUCTOR:
+            self.vmWriter.writePush(
+                Segment.CONSTANT, self.classTable.varCount(IdentifierKind.FIELD)
+            )
+            self.vmWriter.writeCall("Memory.alloc", 1)
+            self.vmWriter.writePop(Segment.POINTER, 0)
+
+        self.compileStatements()
+
+        self._eatSpecified(Symbol.RBRACE.value)
+
+    def compileParameterList(self) -> int:
+        cnt = 0
+        if self._currentTokenValue() == Symbol.RPAREN.value:
+            return cnt
 
         while True:
+            cnt += 1
             typeStr = self._currentTokenValue()
-            typeEle = self._compileType()
-            ele.append(typeEle)
-
+            self._compileType()
             if self.tokenizer.tokenType() != TokenType.IDENTIFIER:
-                raise Exception(
-                    f"Invalid parameter name: {self.tokenizer.current_token}"
-                )
+                raise Exception(f"Invalid parameter name: {self._currentTokenValue()}")
             name = self._currentTokenValue()
-            identifierEle = self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER)
-            index = self._defineSymbol(
-                self.subroutineTable, name, typeStr, IdentifierKind.ARG
-            )
-            self._setSymbolAttributes(
-                identifierEle,
-                name=name,
-                category=SymbolCategory.ARGUMENT,
-                usage=Usage.DEFINED,
-                index=index,
-            )
-            ele.append(identifierEle)
+            self._eatSpecifiedTokenType(TokenType.IDENTIFIER)
+            self._defineSymbol(self.subroutineTable, name, typeStr, IdentifierKind.ARG)
 
-            if self.tokenizer.current_token != Symbol.COMMA.value:
+            if self._currentTokenValue() != Symbol.COMMA.value:
                 break
 
-            ele.append(self._createSpecifiedElement(Symbol.COMMA.value))
+            self._eatSpecified(Symbol.COMMA.value)
+        return cnt
 
-        return ele
-
-    def compileSubroutineBody(self) -> Element:
-        ele = self._createNonTerminalElement(ElementTag.SUBROUTINE_BODY)
-        ele.append(self._createSpecifiedElement(Symbol.LBRACE.value))
-
-        while self.tokenizer.current_token == KeyWord.VAR.value:
-            ele.append(self.compileVarDec())
-
-        ele.append(self.compileStatements())
-        ele.append(self._createSpecifiedElement(Symbol.RBRACE.value))
-        return ele
-
-    def compileVarDec(self) -> Element:
-        if self.tokenizer.current_token != KeyWord.VAR.value:
-            raise Exception(f"Invalid syntax: {self.tokenizer.current_token}")
-
-        ele = self._createNonTerminalElement(ElementTag.VAR_DEC)
-        ele.append(self._createSpecifiedElement(KeyWord.VAR.value))
-
+    def compileVarDec(self) -> None:
+        self._eatSpecified(KeyWord.VAR.value)
         typeStr = self._currentTokenValue()
-        typeEle = self._compileType()
-        ele.append(typeEle)
+        self._compileType()
 
-        if self.tokenizer.tokenType() != TokenType.IDENTIFIER:
-            raise Exception(f"Invalid variable name: {self.tokenizer.current_token}")
         name = self._currentTokenValue()
-        identifierEle = self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER)
-        index = self._defineSymbol(
-            self.subroutineTable, name, typeStr, IdentifierKind.VAR
-        )
-        self._setSymbolAttributes(
-            identifierEle,
-            name=name,
-            category=SymbolCategory.VAR,
-            usage=Usage.DEFINED,
-            index=index,
-        )
-        ele.append(identifierEle)
+        self._eatSpecifiedTokenType(TokenType.IDENTIFIER)
+        self._defineSymbol(self.subroutineTable, name, typeStr, IdentifierKind.VAR)
 
-        while self.tokenizer.current_token == Symbol.COMMA.value:
-            ele.append(self._createSpecifiedElement(Symbol.COMMA.value))
+        while self._currentTokenValue() == Symbol.COMMA.value:
+            self._eatSpecified(Symbol.COMMA.value)
             if self.tokenizer.tokenType() != TokenType.IDENTIFIER:
-                raise Exception(
-                    f"Invalid variable name: {self.tokenizer.current_token}"
-                )
+                raise Exception(f"Invalid variable name: {self._currentTokenValue()}")
             name = self._currentTokenValue()
-            identifierEle = self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER)
-            index = self._defineSymbol(
-                self.subroutineTable, name, typeStr, IdentifierKind.VAR
-            )
-            self._setSymbolAttributes(
-                identifierEle,
-                name=name,
-                category=SymbolCategory.VAR,
-                usage=Usage.DEFINED,
-                index=index,
-            )
-            ele.append(identifierEle)
+            self._eatSpecifiedTokenType(TokenType.IDENTIFIER)
+            self._defineSymbol(self.subroutineTable, name, typeStr, IdentifierKind.VAR)
 
-        ele.append(self._createSpecifiedElement(Symbol.SEMICOLON.value))
-        return ele
+        self._eatSpecified(Symbol.SEMICOLON.value)
 
-    def compileStatements(self) -> Element:
-        ele = self._createNonTerminalElement(ElementTag.STATEMENTS)
-
-        while self.tokenizer.current_token in (
+    def compileStatements(self) -> None:
+        while self._currentTokenValue() in (
             KeyWord.LET.value,
             KeyWord.IF.value,
             KeyWord.WHILE.value,
             KeyWord.DO.value,
             KeyWord.RETURN.value,
         ):
-            if self.tokenizer.current_token == KeyWord.LET.value:
-                ele.append(self.compileLet())
-            elif self.tokenizer.current_token == KeyWord.IF.value:
-                ele.append(self.compileIf())
-            elif self.tokenizer.current_token == KeyWord.WHILE.value:
-                ele.append(self.compileWhile())
-            elif self.tokenizer.current_token == KeyWord.DO.value:
-                ele.append(self.compileDo())
+            if self._currentTokenValue() == KeyWord.LET.value:
+                self.compileLet()
+            elif self._currentTokenValue() == KeyWord.IF.value:
+                self.compileIf()
+            elif self._currentTokenValue() == KeyWord.WHILE.value:
+                self.compileWhile()
+            elif self._currentTokenValue() == KeyWord.DO.value:
+                self.compileDo()
             else:
-                ele.append(self.compileReturn())
+                self.compileReturn()
 
-        return ele
+    def compileLet(self) -> None:
+        self._eatSpecified(KeyWord.LET.value)
 
-    def compileLet(self) -> Element:
-        ele = self._createNonTerminalElement(ElementTag.LET_STATEMENT)
-        ele.append(self._createSpecifiedElement(KeyWord.LET.value))
-        ele.append(self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER))
+        segment, index, _ = self._findSymbol(self._currentTokenValue())
+        self._eatSpecifiedTokenType(TokenType.IDENTIFIER)
 
-        if self.tokenizer.current_token == Symbol.LBRACKET.value:
-            ele.append(self._createSpecifiedElement(Symbol.LBRACKET.value))
-            ele.append(self.compileExpression())
-            ele.append(self._createSpecifiedElement(Symbol.RBRACKET.value))
+        isArr = self._currentTokenValue() == Symbol.LBRACKET.value
 
-        ele.append(self._createSpecifiedElement(Symbol.EQ.value))
-        ele.append(self.compileExpression())
-        ele.append(self._createSpecifiedElement(Symbol.SEMICOLON.value))
-        return ele
+        if isArr:
+            self._eatSpecified(Symbol.LBRACKET.value)
+            self.vmWriter.writePush(segment, index)
+            self.compileExpression()
+            self.vmWriter.writeArithmetic(ArithmeticCommand.ADD)
+            self._eatSpecified(Symbol.RBRACKET.value)
 
-    def compileIf(self) -> Element:
-        ele = self._createNonTerminalElement(ElementTag.IF_STATEMENT)
-        ele.append(self._createSpecifiedElement(KeyWord.IF.value))
-        ele.append(self._createSpecifiedElement(Symbol.LPAREN.value))
-        ele.append(self.compileExpression())
-        ele.append(self._createSpecifiedElement(Symbol.RPAREN.value))
-        ele.append(self._createSpecifiedElement(Symbol.LBRACE.value))
-        ele.append(self.compileStatements())
-        ele.append(self._createSpecifiedElement(Symbol.RBRACE.value))
+        self._eatSpecified(Symbol.EQ.value)
+        self.compileExpression()
 
-        if self.tokenizer.current_token == KeyWord.ELSE.value:
-            ele.append(self._createSpecifiedElement(KeyWord.ELSE.value))
-            ele.append(self._createSpecifiedElement(Symbol.LBRACE.value))
-            ele.append(self.compileStatements())
-            ele.append(self._createSpecifiedElement(Symbol.RBRACE.value))
+        if isArr:
+            self.vmWriter.writePop(Segment.TEMP, 0)
+            self.vmWriter.writePop(Segment.POINTER, 1)
+            self.vmWriter.writePush(Segment.TEMP, 0)
+            self.vmWriter.writePop(Segment.THAT, 0)
+        else:
+            self.vmWriter.writePop(segment, index)
 
-        return ele
+        self._eatSpecified(Symbol.SEMICOLON.value)
 
-    def compileWhile(self) -> Element:
-        ele = self._createNonTerminalElement(ElementTag.WHILE_STATEMENT)
-        ele.append(self._createSpecifiedElement(KeyWord.WHILE.value))
-        ele.append(self._createSpecifiedElement(Symbol.LPAREN.value))
-        ele.append(self.compileExpression())
-        ele.append(self._createSpecifiedElement(Symbol.RPAREN.value))
-        ele.append(self._createSpecifiedElement(Symbol.LBRACE.value))
-        ele.append(self.compileStatements())
-        ele.append(self._createSpecifiedElement(Symbol.RBRACE.value))
-        return ele
+    def compileIf(self) -> None:
+        self._eatSpecified(KeyWord.IF.value)
+        self._eatSpecified(Symbol.LPAREN.value)
+        self.compileExpression()
+        self._eatSpecified(Symbol.RPAREN.value)
+        self._eatSpecified(Symbol.LBRACE.value)
+        self.vmWriter.writeArithmetic(ArithmeticCommand.NOT)
+        labelIf = self._createLabel()
+        self.vmWriter.writeIf(labelIf)
 
-    def compileDo(self) -> Element:
-        ele = self._createNonTerminalElement(ElementTag.DO_STATEMENT)
-        ele.append(self._createSpecifiedElement(KeyWord.DO.value))
-        ele.append(self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER))
+        self.compileStatements()
+        self._eatSpecified(Symbol.RBRACE.value)
 
-        if self.tokenizer.current_token == Symbol.DOT.value:
-            ele.append(self._createSpecifiedElement(Symbol.DOT.value))
-            ele.append(self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER))
+        if self._currentTokenValue() != KeyWord.ELSE.value:
+            self.vmWriter.writeLabel(labelIf)
+            return
 
-        ele.append(self._createSpecifiedElement(Symbol.LPAREN.value))
-        ele.append(self.compileExpressionList())
-        ele.append(self._createSpecifiedElement(Symbol.RPAREN.value))
-        ele.append(self._createSpecifiedElement(Symbol.SEMICOLON.value))
-        return ele
+        labelElse = self._createLabel()
+        self.vmWriter.writeGoto(labelElse)
+        self.vmWriter.writeLabel(labelIf)
 
-    def compileReturn(self) -> Element:
-        ele = self._createNonTerminalElement(ElementTag.RETURN_STATEMENT)
-        ele.append(self._createSpecifiedElement(KeyWord.RETURN.value))
+        self._eatSpecified(KeyWord.ELSE.value)
+        self._eatSpecified(Symbol.LBRACE.value)
+        self.compileStatements()
+        self._eatSpecified(Symbol.RBRACE.value)
+        self.vmWriter.writeLabel(labelElse)
 
-        if self.tokenizer.current_token != Symbol.SEMICOLON.value:
-            ele.append(self.compileExpression())
+    def compileWhile(self) -> None:
+        self._eatSpecified(KeyWord.WHILE.value)
+        self._eatSpecified(Symbol.LPAREN.value)
 
-        ele.append(self._createSpecifiedElement(Symbol.SEMICOLON.value))
-        return ele
+        labelStart = self._createLabel()
+        self.vmWriter.writeLabel(labelStart)
 
-    def compileExpression(self) -> Element:
-        ele = self._createNonTerminalElement(ElementTag.EXPRESSION)
-        ele.append(self.compileTerm())
-        while self.tokenizer.current_token in OP:
-            ele.append(self._createCurrentTokenElement())
-            ele.append(self.compileTerm())
-        return ele
+        self.compileExpression()
+        self._eatSpecified(Symbol.RPAREN.value)
+        self._eatSpecified(Symbol.LBRACE.value)
 
-    def compileExpressionList(self) -> Element:
-        ele = self._createNonTerminalElement(ElementTag.EXPRESSION_LIST)
-        if self.tokenizer.current_token == Symbol.RPAREN.value:
-            return ele
+        self.vmWriter.writeArithmetic(ArithmeticCommand.NOT)
 
-        ele.append(self.compileExpression())
-        while self.tokenizer.current_token == Symbol.COMMA.value:
-            ele.append(self._createSpecifiedElement(Symbol.COMMA.value))
-            ele.append(self.compileExpression())
-        return ele
+        labelEnd = self._createLabel()
+        self.vmWriter.writeIf(labelEnd)
+        self.compileStatements()
+        self.vmWriter.writeGoto(labelStart)
 
-    def compileTerm(self) -> Element:
-        ele = self._createNonTerminalElement(ElementTag.TERM)
-        if self.tokenizer.tokenType() in (TokenType.INT_CONST, TokenType.STRING_CONST):
-            ele.append(self._createCurrentTokenElement())
-            return ele
+        self._eatSpecified(Symbol.RBRACE.value)
+        self.vmWriter.writeLabel(labelEnd)
 
-        if self.tokenizer.current_token in KEYWORD_CONSTANT:
-            ele.append(self._createCurrentTokenElement())
-            return ele
+    def compileDo(self) -> None:
+        self._eatSpecified(KeyWord.DO.value)
 
-        if self.tokenizer.current_token == Symbol.LPAREN.value:
-            ele.append(self._createSpecifiedElement(Symbol.LPAREN.value))
-            ele.append(self.compileExpression())
-            ele.append(self._createSpecifiedElement(Symbol.RPAREN.value))
-            return ele
+        self.compileExpression()
 
-        if self.tokenizer.current_token in UNARY_OP:
-            ele.append(self._createCurrentTokenElement())
-            ele.append(self.compileTerm())
-            return ele
+        self.vmWriter.writePop(Segment.TEMP, 0)
 
-        if self.tokenizer.tokenType() != TokenType.IDENTIFIER:
-            raise Exception(f"Invalid syntax {self.tokenizer.current_token}")
+        self._eatSpecified(Symbol.SEMICOLON.value)
+
+    def compileReturn(self) -> None:
+        self._eatSpecified(KeyWord.RETURN.value)
+
+        if self._currentTokenValue() != Symbol.SEMICOLON.value:
+            self.compileExpression()
+
+        self._eatSpecified(Symbol.SEMICOLON.value)
+        self.vmWriter.writeReturn()
+
+    def compileExpression(self) -> None:
+        self.compileTerm()
+        while (
+            self._currentTokenValue() in ARITHMETIC_OP_MAP
+            or self._currentTokenValue() in OS_OP_MAP
+        ):
+            if self._currentTokenValue() in ARITHMETIC_OP_MAP:
+                op = ARITHMETIC_OP_MAP[self._currentTokenValue()]
+                self._eatCurrentToken()
+                self.compileTerm()
+                self.vmWriter.writeArithmetic(op)
+            elif self._currentTokenValue() in OS_OP_MAP:
+                opOs = OS_OP_MAP[self._currentTokenValue()]
+                self._eatCurrentToken()
+                self.compileTerm()
+                self.vmWriter.writeCall(opOs, 2)
+
+    def compileExpressionList(self) -> int:
+        cnt = 0
+        if self._currentTokenValue() == Symbol.RPAREN.value:
+            return cnt
+
+        cnt += 1
+        self.compileExpression()
+
+        while self._currentTokenValue() == Symbol.COMMA.value:
+            cnt += 1
+            self._eatSpecified(Symbol.COMMA.value)
+            self.compileExpression()
+
+        return cnt
+
+    def compileTerm(self) -> None:
+        tokenType = self.tokenizer.tokenType()
+
+        if tokenType == TokenType.INT_CONST:
+            self.vmWriter.writePush(Segment.CONSTANT, self.tokenizer.intVal())
+            self._eatCurrentToken()
+            return
+
+        if tokenType == TokenType.STRING_CONST:
+            stringVal = self.tokenizer.stringVal()
+            self.vmWriter.writePush(Segment.CONSTANT, len(stringVal))
+            self.vmWriter.writeCall("String.new", 1)
+            self.vmWriter.writePop(Segment.TEMP, 0)
+            for c in stringVal:
+                self.vmWriter.writePush(Segment.TEMP, 0)
+                self.vmWriter.writePush(Segment.CONSTANT, CHAR_TO_CODE[c])
+                self.vmWriter.writeCall("String.appendChar", 2)
+                self.vmWriter.writePop(Segment.TEMP, 0)
+            self.vmWriter.writePush(Segment.TEMP, 0)
+            self._eatCurrentToken()
+            return
+
+        if self._currentTokenValue() in KEYWORD_CONSTANT:
+            keyword = self._currentTokenValue()
+            self._eatCurrentToken()
+            if keyword == KeyWord.TRUE.value:
+                self.vmWriter.writePush(Segment.CONSTANT, 0)
+                self.vmWriter.writeArithmetic(ArithmeticCommand.NOT)
+            elif keyword in (KeyWord.FALSE.value, KeyWord.NULL.value):
+                self.vmWriter.writePush(Segment.CONSTANT, 0)
+            elif keyword == KeyWord.THIS.value:
+                self.vmWriter.writePush(Segment.POINTER, 0)
+            return
+
+        if self._currentTokenValue() == Symbol.LPAREN.value:
+            self._eatSpecified(Symbol.LPAREN.value)
+            self.compileExpression()
+            self._eatSpecified(Symbol.RPAREN.value)
+            return
+
+        if self._currentTokenValue() in (Symbol.MINUS.value, Symbol.TILDE.value):
+            op = self._currentTokenValue()
+            self._eatCurrentToken()
+            self.compileTerm()
+            if op == Symbol.MINUS.value:
+                self.vmWriter.writeArithmetic(ArithmeticCommand.NEG)
+            else:
+                self.vmWriter.writeArithmetic(ArithmeticCommand.NOT)
+            return
+
+        if tokenType != TokenType.IDENTIFIER:
+            raise Exception(f"Invalid syntax {self._currentTokenValue()}")
 
         # 先読みが必要なもの
-        ele.append(self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER))
-        if self.tokenizer.current_token == Symbol.LBRACKET.value:
-            ele.append(self._createSpecifiedElement(Symbol.LBRACKET.value))
-            ele.append(self.compileExpression())
-            ele.append(self._createSpecifiedElement(Symbol.RBRACKET.value))
-        elif self.tokenizer.current_token == Symbol.LPAREN.value:
-            ele.append(self._createSpecifiedElement(Symbol.LPAREN.value))
-            ele.append(self.compileExpressionList())
-            ele.append(self._createSpecifiedElement(Symbol.RPAREN.value))
-        elif self.tokenizer.current_token == Symbol.DOT.value:
-            ele.append(self._createSpecifiedElement(Symbol.DOT.value))
-            ele.append(self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER))
-            ele.append(self._createSpecifiedElement(Symbol.LPAREN.value))
-            ele.append(self.compileExpressionList())
-            ele.append(self._createSpecifiedElement(Symbol.RPAREN.value))
-        return ele
+        prevToken = self._currentTokenValue()
+        self._eatSpecifiedTokenType(TokenType.IDENTIFIER)
+        if self._currentTokenValue() == Symbol.LBRACKET.value:
+            self._eatSpecified(Symbol.LBRACKET.value)
+            if not self._hasSymbol(prevToken):
+                raise Exception(f"Invalid syntax {self._currentTokenValue()}")
+            seg, index, _ = self._findSymbol(prevToken)
+            self.vmWriter.writePush(seg, index)
+            self.compileExpression()
+            self.vmWriter.writeArithmetic(ArithmeticCommand.ADD)
+            self.vmWriter.writePop(Segment.POINTER, 1)
+            self.vmWriter.writePush(Segment.THAT, 0)
+            self._eatSpecified(Symbol.RBRACKET.value)
+        elif self._currentTokenValue() == Symbol.LPAREN.value:
+            # invoke its own method
+            if not self.currentClassName:
+                raise Exception("Class name must be set before invoking subroutines")
+            self._eatSpecified(Symbol.LPAREN.value)
+            qualifiedName = f"{self.currentClassName}{Symbol.DOT.value}{prevToken}"
 
-    def _compileType(self) -> Element:
+            self.vmWriter.writePush(Segment.POINTER, 0)
+
+            argNum = self.compileExpressionList()
+            self.vmWriter.writeCall(qualifiedName, argNum + 1)
+            self._eatSpecified(Symbol.RPAREN.value)
+        elif self._currentTokenValue() == Symbol.DOT.value:
+            self._eatSpecified(Symbol.DOT.value)
+            subroutineIdentifier = self._currentTokenValue()
+
+            # call method on instance stored in symbol tables
+            argOffset = 0
+            subroutineName = f"{prevToken}.{subroutineIdentifier}"
+            if self._hasSymbol(prevToken):
+                seg, index, typeName = self._findSymbol(prevToken)
+                self.vmWriter.writePush(seg, index)
+                subroutineName = f"{typeName}.{subroutineIdentifier}"
+                argOffset = 1
+
+            self._eatSpecifiedTokenType(TokenType.IDENTIFIER)
+            self._eatSpecified(Symbol.LPAREN.value)
+
+            argNum = self.compileExpressionList()
+            self.vmWriter.writeCall(subroutineName, argNum + argOffset)
+            self._eatSpecified(Symbol.RPAREN.value)
+        else:
+            # 変数のみ
+            seg, index, _ = self._findSymbol(prevToken)
+            self.vmWriter.writePush(seg, index)
+
+    def _compileType(self) -> None:
         if (
             self.tokenizer.tokenType() == TokenType.KEYWORD
-            and self.tokenizer.current_token in PRIMITIVE_TYPE
+            and self._currentTokenValue() in PRIMITIVE_TYPE
         ):
-            return self._createCurrentTokenElement()
+            self._eatCurrentToken()
+            return
 
         if self.tokenizer.tokenType() == TokenType.IDENTIFIER:
-            return self._createSpecifiedTokenTypeElement(TokenType.IDENTIFIER)
+            self._eatSpecifiedTokenType(TokenType.IDENTIFIER)
+            return
 
-        raise Exception(f"Invalid syntax: {self.tokenizer.current_token}")
+        raise Exception(f"Invalid syntax: {self._currentTokenValue()}")
 
-    def _createSpecifiedTokenTypeElement(self, tokenType: TokenType) -> Element:
+    def _eatSpecifiedTokenType(self, tokenType: TokenType) -> None:
         if self.tokenizer.tokenType() != tokenType:
-            raise Exception(f"Invalid syntax: {self.tokenizer.current_token}")
+            raise Exception(f"Invalid syntax: {self._currentTokenValue()}")
 
-        literal = self._currentTokenValue()
-        ele = self._createCurrentTokenElement()
+        self._eatCurrentToken()
 
-        if tokenType == TokenType.IDENTIFIER:
-            ele.set("name", literal)
-            lookup = self._lookupSymbol(literal)
-            if lookup:
-                category, index = lookup
-                self._setSymbolAttributes(
-                    ele,
-                    name=literal,
-                    category=category,
-                    usage=Usage.USED,
-                    index=index,
-                )
-        return ele
-
-    def _createCurrentTokenElement(self) -> Element:
-        token_tag = self.tokenizer.tokenType().value
-        text = self._currentTokenValue()
-        ele = self._createTerminalElement(token_tag, text)
-
+    def _eatCurrentToken(self) -> None:
         if self.tokenizer.hasMoreTokens():
             self.tokenizer.advance()
-        return ele
 
-    def _createSpecifiedElement(self, token: str) -> Element:
-        if self.tokenizer.current_token != token:
-            raise Exception(f"Invalid syntax: {self.tokenizer.current_token}")
+    def _eatSpecified(self, token: str) -> None:
+        if self._currentTokenValue() != token:
+            raise Exception(f"Invalid syntax: {self._currentTokenValue()}")
 
-        return self._createCurrentTokenElement()
+        self._eatCurrentToken()
 
-    def _createNonTerminalElement(self, tag: ElementTag) -> Element:
-        ele = Element(tag.value)
-        ele.tail = "\n"
-        return ele
-
-    def _createTerminalElement(self, tag: str, text: str) -> Element:
-        ele = Element(tag)
-        ele.tail = "\n"
-        ele.text = f" {text} "
-        return ele
-
-    def _setSymbolAttributes(
-        self,
-        element: Element,
-        *,
-        name: str,
-        category: SymbolCategory,
-        usage: Usage,
-        index: Optional[int] = None,
-    ) -> None:
-        element.set("name", name)
-        element.set("category", category.value)
-        element.set("usage", usage.value)
-        if index is not None:
-            element.set("index", str(index))
+    def _createLabel(self) -> str:
+        label = LABEL_BASE.format(self.labelNum)
+        self.labelNum += 1
+        return label
 
     def _defineSymbol(
         self, table: SymbolTable, name: str, type_name: str, kind: IdentifierKind
@@ -534,18 +543,23 @@ class CompilationEngine:
         table.define(name, type_name, kind)
         return table.indexOf(name)
 
-    def _lookupSymbol(self, name: str) -> Optional[tuple[SymbolCategory, int]]:
+    def _hasSymbol(self, name: str) -> bool:
+        return self.subroutineTable.hasName(name) or self.classTable.hasName(name)
+
+    def _findSymbol(self, name: str) -> tuple[Segment, int, str]:
         if self.subroutineTable.hasName(name):
             kind = self.subroutineTable.kindOf(name)
-            index = self.subroutineTable.indexOf(name)
-            category = SymbolCategory.fromIdentifierKind(kind)
-            return category, index
-        if self.class_table.hasName(name):
-            kind = self.class_table.kindOf(name)
-            index = self.class_table.indexOf(name)
-            category = SymbolCategory.fromIdentifierKind(kind)
-            return category, index
-        return None
+            segment = Segment.fromIdentifierKind(kind)
+            return (
+                segment,
+                self.subroutineTable.indexOf(name),
+                self.subroutineTable.typeOf(name),
+            )
+        if self.classTable.hasName(name):
+            kind = self.classTable.kindOf(name)
+            segment = Segment.fromIdentifierKind(kind)
+            return segment, self.classTable.indexOf(name), self.classTable.typeOf(name)
+        raise Exception(f"{name} is not found in symbol table")
 
     def _currentTokenValue(self) -> str:
         token_type = self.tokenizer.tokenType()

@@ -2,7 +2,7 @@ import io
 import os
 import sys
 from typing import Iterable
-from xml.etree.ElementTree import Element, ElementTree
+from xml.etree.ElementTree import Element
 
 from compilation_engine import CompilationEngine
 from jack_tokenizer import JackTokenizer
@@ -51,32 +51,16 @@ def _indent(element: Element, level: int = 0) -> None:
             element.tail = indent
 
 
-def compile_file(jack_path: str) -> str:
+def compile_file(jack_path: str) -> None:
     tokenizer = JackTokenizer(jack_path)
-    engine = CompilationEngine(tokenizer)
-    root = engine.compileClass()
-    _indent(root)
-
-    output_path = jack_path[:-5] + ".xml"
-    tree = ElementTree(root)
-    buffer = io.BytesIO()
-    tree.write(
-        buffer,
-        encoding="utf-8",
-        xml_declaration=False,
-        short_empty_elements=False,
-    )
-
-    content = buffer.getvalue().decode("utf-8").replace("\n", "\r\n")
-    with open(output_path, "w", encoding="utf-8", newline="") as output_file:
-        output_file.write(content)
-    return output_path
+    engine = CompilationEngine(tokenizer, jack_path[:-5] + ".vm")
+    engine.compileClass()
 
 
 def process_files(jack_files: Iterable[str]) -> None:
     for jack_path in jack_files:
-        compilation_output = compile_file(jack_path)
-        print(f"Compiled: {compilation_output}")
+        compile_file(jack_path)
+        print(f"Compiled: {jack_path}")
 
 
 def main() -> None:
