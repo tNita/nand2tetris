@@ -13,9 +13,19 @@ class Array {
 
     /** Constructs a new Array of the given size. */
     function Array new(int size) {
+        var Array memory;
+
+        if (size < 0) {
+            return 0;
+        }
+
+        let memory = Memory.alloc(size);
+        return memory;
     }
 
     /** Disposes this array. */
     method void dispose() {
+        do Memory.deAlloc(this);
+        return; 
     }
 }

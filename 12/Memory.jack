@@ -7,26 +7,117 @@
  * consists of 32,768 words, each holding a 16-bit binary number.
  */ 
 class Memory {
+    static int freeList, heapBase, heapSize;
 
     /** Initializes the class. */
     function void init() {
+        let heapBase = 2048;
+        let heapSize = 16384 - heapBase;
+
+        do Memory.poke(heapBase, heapSize);
+        do Memory.poke(heapBase + 1, -1);
+        let freeList = heapBase;
+        return;
     }
 
     /** Returns the RAM value at the given address. */
     function int peek(int address) {
+        var Array ram;
+        let ram = address;
+        return ram[0];
     }
 
     /** Sets the RAM value at the given address to the given value. */
     function void poke(int address, int value) {
+        var Array ram;
+        let ram = address;
+        let ram[0] = value;
+        return;
     }
 
     /** Finds an available RAM block of the given size and returns
      *  a reference to its base address. */
-    function int alloc(int size) {
+    function Array alloc(int size) {
+        var int prevAddr, currAddr, blockSize, requiredSize, nextAddr, leftSize, newBlockAddr;
+        var int bestAddrPrev, bestAddr, bestSize;
+
+        if (size < 0) {
+            // TODO: Call Sys.error
+            return 0;
+        }
+
+        let requiredSize = size + 2;
+        let prevAddr = -1;
+        let currAddr = freeList;
+        let bestAddrPrev = -1;
+        let bestAddr = -1;
+        let bestSize = 0;
+
+        // Search best fit block from freeList
+        while (~(currAddr = -1)) {
+            let blockSize = Memory.peek(currAddr);
+            if (~(blockSize < requiredSize)) {
+                if (bestAddr = -1) {
+                    let bestAddr = currAddr;
+                    let bestAddrPrev = prevAddr;
+                    let bestSize = blockSize;
+                } else {
+                    if (blockSize < bestSize) {
+                        let bestAddr = currAddr;
+                        let bestAddrPrev = prevAddr;
+                        let bestSize = blockSize;
+                    }
+                }
+            }
+
+            let prevAddr = currAddr;
+            let currAddr = Memory.peek(currAddr + 1);
+        }
+
+        if (bestAddr = -1) {
+            // TODO: Call Sys.error as OOM
+            return 0;
+        }
+
+        let nextAddr = Memory.peek(bestAddr + 1);
+        let leftSize = bestSize - requiredSize;
+
+        if (leftSize < 3) {
+            if (bestAddrPrev = -1) {
+                let freeList = nextAddr;
+            } else {
+                do Memory.poke(bestAddrPrev + 1, nextAddr);
+            }
+        } else {
+            let newBlockAddr = bestAddr + requiredSize;
+
+            do Memory.poke(bestAddr, requiredSize);
+            do Memory.poke(newBlockAddr, leftSize);
+            do Memory.poke(newBlockAddr + 1, nextAddr);
+
+            if (bestAddrPrev = -1) {
+                let freeList = newBlockAddr;
+            } else {
+                do Memory.poke(bestAddrPrev + 1, newBlockAddr);
+            }
+        }
+
+        return bestAddr + 2;
     }
 
     /** De-allocates the given object (cast as an array) by making
      *  it available for future allocations. */
     function void deAlloc(Array o) {
-    }    
+        var int blockBase; // ヘッダ位置
+
+        if (o = 0) {
+            // TODO: call Sys.error
+            return;
+        }
+
+        let blockBase = o - 2;
+        do Memory.poke(blockBase + 1, freeList);
+        let freeList = blockBase;
+        return;
+    }
 }
