@@ -17,6 +17,11 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Run regression tests of project 10
-        run: |
-          bash 10/run_regression_tests.sh
+      - name: Run regression tests of assembler (project 6)
+        run: bash 06/run_regression_tests.sh
+
+      - name: Run regression test of vm implementation (project 7, 8)
+        run: bash 07_08/run_regression_tests.sh
+
+      - name: Run regression tests of compiler (project 10, 11)
+        run: bash 10_11/run_regression_tests.sh
