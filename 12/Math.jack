@@ -73,8 +73,7 @@ class Math {
     function int unsignedDivide(int x, int y) {
         var int q, doubleQ;
         if (y = 0) {
-            // TODO: call Sys.error
-            return 0;
+            do Sys.error(1);
         }
 
         // if y < 0, y is overflowed
@@ -96,8 +95,7 @@ class Math {
     function int sqrt(int x) {
         var int y, j, z, doubleZ;
         if (x < 0) {
-            // TODO: call Sys.error
-            return 0;
+            do Sys.error(1);
         }
         let j = (n / 2) - 1;
         let y = 0;

@@ -42,7 +42,7 @@ class Screen {
         var int targetAddress, targetBit, targetVal, i, mask;
 
         if ((x < 0) | (x > 511) | (y < 0) | (y > 255)) {
-            // TODO: Sys#err
+            do Sys.error(1);
             return;
         }
 
@@ -169,12 +169,12 @@ class Screen {
         var int a, dx, startX;
         let a = 0;
         if (x1 > x2) {
-            // TODO: call Sys#err
+            do Sys.error(1);
             return;
         }
 
         if (y1 > y2) {
-            // TODO: call Sys#err
+            do Sys.error(1);
             return;
         }
 

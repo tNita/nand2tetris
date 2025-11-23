@@ -42,7 +42,7 @@ class String {
     /** Sets the character at the j-th location of this string to c. */
     method void setCharAt(int j, char c) {
         if((j < 0) | (~(j < length))){
-            // TODO: call Sys.error
+            do Sys.error(1);
             return;
 		}
         let chars[j] = c;
@@ -56,7 +56,7 @@ class String {
             let length = length + 1;
             return this;
         }
-        // TODO: call Sys#exit
+        do Sys.error(1);
         return this;
     }
 
@@ -67,7 +67,7 @@ class String {
             let chars[length] = 0;
             return;
         }
-        // TODO: call Sys#exit
+        do Sys.error(1);
         return;
     }
 
@@ -119,7 +119,7 @@ class String {
     method void addDigits(int val) {
         var int q, lastDigit;
         if (val < 0) {
-            // TODO: call sys.error
+            do Sys.error(1);
             return;
         }
 		if(val < 10){

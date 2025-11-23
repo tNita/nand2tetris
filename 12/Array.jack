@@ -16,7 +16,7 @@ class Array {
         var Array memory;
 
         if (size < 0) {
-            return 0;
+            do Sys.error(1);
         }
 
         let memory = Memory.alloc(size);

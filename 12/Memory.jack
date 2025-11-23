@@ -42,7 +42,7 @@ class Memory {
         var int bestAddrPrev, bestAddr, bestSize;
 
         if (size < 0) {
-            // TODO: Call Sys.error
+            do Sys.error(1);
             return 0;
         }
 
@@ -75,7 +75,7 @@ class Memory {
         }
 
         if (bestAddr = -1) {
-            // TODO: Call Sys.error as OOM
+            do Sys.error(1);
             return 0;
         }
 
@@ -111,7 +111,7 @@ class Memory {
         var int blockBase; // ヘッダ位置
 
         if (o = 0) {
-            // TODO: call Sys.error
+            do Sys.error(1);
             return;
         }
 
