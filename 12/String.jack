@@ -9,54 +9,142 @@
  * string-oriented operations.
  */
 class String {
+    field Array chars;
+    field int maxLen, length;
 
     /** constructs a new empty string with a maximum length of maxLength
      *  and initial length of 0. */
     constructor String new(int maxLength) {
+
+        let chars = Array.new(maxLength);
+        let maxLen = maxLength;
+        let length = 0;
+        return this;
     }
 
     /** Disposes this string. */
     method void dispose() {
+        do chars.dispose();
+        do Memory.deAlloc(this);
+        return;
     }
 
     /** Returns the current length of this string. */
     method int length() {
+        return length;
     }
 
     /** Returns the character at the j-th location of this string. */
     method char charAt(int j) {
+        return chars[j];
     }
 
     /** Sets the character at the j-th location of this string to c. */
     method void setCharAt(int j, char c) {
+        if((j < 0) | (~(j < length))){
+            // TODO: call Sys.error
+            return;
+		}
+        let chars[j] = c;
+        return;
     }
 
     /** Appends c to this string's end and returns this string. */
     method String appendChar(char c) {
+        if (length < maxLen) {
+            let chars[length] = c;
+            let length = length + 1;
+            return this;
+        }
+        // TODO: call Sys#exit
+        return this;
     }
 
     /** Erases the last character from this string. */
     method void eraseLastChar() {
+        if(length > 0) {
+            let length = length - 1;
+            let chars[length] = 0;
+            return;
+        }
+        // TODO: call Sys#exit
+        return;
     }
 
     /** Returns the integer value of this string, 
      *  until a non-digit character is detected. */
     method int intValue() {
+        var int i, sign, intVal, digit;
+        let i = 0;
+        let sign = 1;
+        let intVal = 0;
+
+        if (length = 0) {
+            return 0;
+        }
+
+        // if top of this char is minus(45)
+        if (chars[i] = 45) {
+            let sign = -1;
+            let i = i + 1;
+        }
+
+        while (i < length) {
+            if ((chars[i] < 48) | (chars[i] > 57)) {
+                return sign * intVal;
+            }
+            let digit = chars[i] - 48;
+            let intVal = intVal * 10 + digit;
+            let i = i + 1;
+        }
+        return sign * intVal;
     }
 
     /** Sets this string to hold a representation of the given value. */
     method void setInt(int val) {
+        var int absVal;
+        let length = 0;
+
+        if (val < 0) {
+            let absVal = -val;
+            do appendChar(45); // -(minus)
+        } else {
+            let absVal = val;
+        }
+
+        do addDigits(absVal);
+        return;
+    }
+
+    method void addDigits(int val) {
+        var int q, lastDigit;
+        if (val < 0) {
+            // TODO: call sys.error
+            return;
+        }
+		if(val < 10){
+			do appendChar(val + 48);
+            return;
+		}
+        let q = val / 10;
+        do addDigits(q);
+        let lastDigit = val - (q * 10);
+        do appendChar(lastDigit + 48);
+		return;
     }
 
     /** Returns the new line character. */
     function char newLine() {
+        return 128;
     }
 
     /** Returns the backspace character. */
     function char backSpace() {
+        return 129;
     }
 
     /** Returns the double quote (") character. */
     function char doubleQuote() {
+        return 34;
     }
 }
