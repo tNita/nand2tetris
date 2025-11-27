@@ -32,7 +32,6 @@ CHIP CPU {
         pc[15];          // address of next instruction
 
     PARTS:
-	//// Replace this comment with your code.
 
     // Aレジスタ
     // A命令 or C命令でdestにAを含む時にAレジスタに保存

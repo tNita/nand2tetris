@@ -41,7 +41,6 @@ CHIP ALU {
         ng;      // if (out < 0)  equals 1, else 0
 
     PARTS:
-    //// Replace this comment with your code.
 
     Mux16(a=x, b=false, sel=zx, out=tempX);
     Not16(in=tempX, out=notTempX);

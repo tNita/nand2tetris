@@ -14,7 +14,6 @@ CHIP PC {
     OUT out[16];
     
     PARTS:
-    //// Replace this comment with your code.
     
     
     Inc16(in=fo, out=outInc);

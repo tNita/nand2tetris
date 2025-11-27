@@ -17,5 +17,4 @@ CHIP Mux {
     And(a= sel, b= b, out= bResult);
     Or(a= aResult, b= bResult, out= out);
     
-    //// Replace this comment with your code.
 }

@@ -13,7 +13,6 @@ CHIP Register {
     OUT out[16];
 
     PARTS:
-    //// Replace this comment with your code.
     Bit(in=in[0], load=load, out=out[0]);
     Bit(in=in[1], load=load, out=out[1]);
     Bit(in=in[2], load=load, out=out[2]);
