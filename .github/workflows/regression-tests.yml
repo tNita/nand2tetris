@@ -25,3 +25,12 @@ jobs:
 
       - name: Run regression tests of compiler (project 10, 11)
         run: bash 10_11_jack_compiler/run_regression_tests.sh
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Run regression tests of Java transpiler (project 13)
+        run: bash 13_transpiler_to_java/run_regression_tests.sh
