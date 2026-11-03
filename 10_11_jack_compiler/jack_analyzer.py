@@ -1,11 +1,13 @@
 import io
 import os
 import sys
-from typing import Iterable
+import tempfile
+from typing import Iterable, Optional
 from xml.etree.ElementTree import Element
 
 from compilation_engine import CompilationEngine
 from jack_tokenizer import JackTokenizer
+from type_checker import TypeCheckError, TypeRegistry
 
 
 def collect_jack_files(input_path: str) -> list[str]:
@@ -51,15 +53,33 @@ def _indent(element: Element, level: int = 0) -> None:
             element.tail = indent
 
 
-def compile_file(jack_path: str) -> None:
+def compile_file(jack_path: str, registry: Optional[TypeRegistry] = None) -> None:
+    jack_path = os.path.abspath(jack_path)
+    if registry is None:
+        registry = TypeRegistry.from_files(collect_jack_files(os.path.dirname(jack_path)))
     tokenizer = JackTokenizer(jack_path)
-    engine = CompilationEngine(tokenizer, jack_path[:-5] + ".vm")
-    engine.compileClass()
+    # A rejected source must not overwrite an existing VM file with partial code.
+    with tempfile.NamedTemporaryFile(
+        dir=os.path.dirname(jack_path), suffix=".vm", delete=False
+    ) as output:
+        temp_path = output.name
+    try:
+        engine = CompilationEngine(tokenizer, temp_path, registry)
+        try:
+            engine.compileClass()
+        finally:
+            engine.vmWriter.close()
+        os.replace(temp_path, jack_path[:-5] + ".vm")
+    finally:
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
 
 
 def process_files(jack_files: Iterable[str]) -> None:
+    jack_files = list(jack_files)
+    registry = TypeRegistry.from_files(jack_files)
     for jack_path in jack_files:
-        compile_file(jack_path)
+        compile_file(jack_path, registry)
         print(f"Compiled: {jack_path}")
 
 
@@ -70,7 +90,15 @@ def main() -> None:
 
     input_path = sys.argv[1]
     jack_files = collect_jack_files(input_path)
-    process_files(jack_files)
+    try:
+        if os.path.isfile(input_path):
+            compile_file(jack_files[0])
+            print(f"Compiled: {jack_files[0]}")
+        else:
+            process_files(jack_files)
+    except TypeCheckError as error:
+        print(error, file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

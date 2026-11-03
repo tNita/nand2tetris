@@ -89,11 +89,13 @@ SKIP_REGEX = re.compile(r"(\s+|//.*|\/\*[\s\S]*?\*\/)")
 
 class JackTokenizer:
     def __init__(self, filepath: str) -> None:
+        self.filepath = filepath
         with open(filepath, "r") as f:
             source_with_comments = f.read()
         self.source = source_with_comments
         self.counter: int = 0
         self.current_token: str = ""
+        self.token_start = 0
 
     def hasMoreTokens(self) -> bool:
         next_index = self._skip_ignored_from(self.counter)
@@ -101,6 +103,7 @@ class JackTokenizer:
 
     def advance(self) -> None:
         self.counter = self._skip_ignored_from(self.counter)
+        self.token_start = self.counter
 
         if self.counter >= len(self.source):
             # バグ

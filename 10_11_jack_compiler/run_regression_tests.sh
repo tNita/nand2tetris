@@ -5,6 +5,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 JACK_ANALYZER="$SCRIPT_DIR/jack_analyzer.py"
 SAMPLE_ROOT="$SCRIPT_DIR/sample"
+PYTHON="${PYTHON:-python3}"
+
+"$PYTHON" -m unittest discover -s "$SCRIPT_DIR" -p 'test_*.py'
 
 if [[ ! -d "$SAMPLE_ROOT" ]]; then
   echo "Sample directory not found: $SAMPLE_ROOT" >&2
@@ -22,15 +25,12 @@ for target in "$SAMPLE_ROOT"/*; do
   work_dir="$TMP_ROOT/$base_name"
 
   cp -R "$target" "$work_dir"
-  find "$work_dir" -type f -name '*.xml' -delete
+  find "$work_dir" -type f -name '*.vm' -delete
 
   echo "Processing: $target"
-  python "$JACK_ANALYZER" "$work_dir" >/dev/null
+  "$PYTHON" "$JACK_ANALYZER" "$work_dir" >/dev/null
 
   while IFS= read -r expected; do
-    # Skip tokenizer outputs now that the analyzer only produces parse trees
-    [[ "$expected" == *T.xml ]] && continue
-
     rel_path="${expected#"${target}/"}"
     generated="$work_dir/$rel_path"
     if [[ ! -f "$generated" ]]; then
@@ -44,7 +44,7 @@ for target in "$SAMPLE_ROOT"/*; do
       cat "$TMP_ROOT/diff" >&2
       status=1
     fi
-  done < <(find "$target" -type f -name '*.xml' | sort)
+  done < <(find "$target" -type f -name '*.vm' | sort)
 done
 
 if [[ $status -ne 0 ]]; then
